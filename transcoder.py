@@ -6,7 +6,8 @@ import datetime
 import math
 import os
 
-mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
+# mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
+mpd_url = 'https://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd'
 
 
 # Scale the segment to a different resolution
@@ -78,20 +79,27 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
     BaseSegmentName = segmentTemplate.replace("$RepresentationID$", representationID)
 
     # Init segment is 0, so start at 1 for data segments
-    for i in range(1,numberOfSegments):
+    for i in range(1,2):
         segmentName = BaseSegmentName.replace("$Number$", str(i))
         # The file we will call HTTP GET for
         getURL = baseURL + segmentName
         # The relative file location and name for the downloaded segment
         print(segmentName)
         fileName = segmentName
+        print(fileName)
         print("GET " + getURL)
         # Do HTTP GET
         urllib.request.urlretrieve(getURL, fileName)
 
         # TODO: start a new thread here that transcodes the download file
         fileNameSplit = fileName.split(".")
-        fileName_seg_initialised = fileNameSplit[0] + '_initialised' + "." + fileNameSplit[1]
+        fileName_seg_initialised = ""
+        for i in range(len(fileNameSplit) -2):
+            fileName_seg_initialised += fileNameSplit[i] + "."
+        fileName_seg_initialised += fileNameSplit[len(fileNameSplit) - 2] + '_initialised' + '.' + fileNameSplit[len(fileNameSplit) - 1]
+        # fileName_seg_initialised = fileNameSplit[0] + '_initialised' + "." + fileNameSplit[1]
+        print(fileName_seg_initialised)
+        print(fileNameSplit)
         catSegment(fileName_init, fileName, fileName_seg_initialised)
 
 '''
@@ -128,7 +136,12 @@ def parseMPD(mpd_url):
     stream = MPD_FindHighestStream(mpd_representations)
     representationID = stream.id
     mpd_segment_template_string = mpd.periods[0].adaptation_sets[0].segment_templates[0].media
-    base_stream_url = mpd.base_urls[0].base_url_value
+    try:
+        base_stream_url = mpd.base_urls[0].base_url_value
+    except:
+        print("MPD base URL error")
+        base_stream_url = ""
+
     base_site_url = findBaseURL(mpd_url)
     base_url_final = base_site_url + base_stream_url
 
