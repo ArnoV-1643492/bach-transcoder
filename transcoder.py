@@ -3,7 +3,8 @@ import urllib
 import ffmpeg
 import isodate
 import datetime
-
+import math
+import os
 
 mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
 
@@ -30,6 +31,7 @@ def GetSegments(baseURL, fileNameTemplate, baseWriteLocation, numberOfSegments, 
     fileName_init = baseWriteLocation + fileNameTemplate + '0' + containerExtention
     # Download init segment
     print("GET " + getURL_init)
+    print(fileName_init)
     urllib.request.urlretrieve(getURL_init, fileName_init)
 
     # Init segment is 0, so start at 1 for data segments
@@ -51,19 +53,29 @@ def GetSegments(baseURL, fileNameTemplate, baseWriteLocation, numberOfSegments, 
 
 
 # HTTP GETs all the segments and saves them on disc
-def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate, representationID):
-    '''
-    # First download init segment number 0
-    getURL_init =  baseURL + fileNameTemplate + '0' + containerExtention
-    fileName_init = baseWriteLocation + fileNameTemplate + '0' + containerExtention
+def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate, representationID, initSegmentTemplate):
+    
+    # First download init segment
+    initSegmentName = initSegmentTemplate.replace("$RepresentationID$", representationID)
+    getURL_init =  baseURL + initSegmentName
+    fileName_init = initSegmentName
+
+    print(getURL_init)
+    print(fileName_init)
+
+    # Make directory
+    initSegmentNameSplit = initSegmentName.split("/")
+    dirName = ""
+    for i in range(0, len(initSegmentNameSplit) - 1):
+        dirName += initSegmentNameSplit[i] + "/"
+    if not os.path.exists(dirName):
+        os.makedirs(dirName)
+
     # Download init segment
     print("GET " + getURL_init)
     urllib.request.urlretrieve(getURL_init, fileName_init)
-    '''
 
-    print(segmentTemplate)
     BaseSegmentName = segmentTemplate.replace("$RepresentationID$", representationID)
-    print(BaseSegmentName)
 
     # Init segment is 0, so start at 1 for data segments
     for i in range(1,numberOfSegments):
@@ -71,16 +83,18 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
         # The file we will call HTTP GET for
         getURL = baseURL + segmentName
         # The relative file location and name for the downloaded segment
+        print(segmentName)
         fileName = segmentName
         print("GET " + getURL)
         # Do HTTP GET
         urllib.request.urlretrieve(getURL, fileName)
 
-'''
         # TODO: start a new thread here that transcodes the download file
-        fileName_seg_initialised = baseWriteLocation + fileNameTemplate + str(i) + '_initialised' + containerExtention
+        fileNameSplit = fileName.split(".")
+        fileName_seg_initialised = fileNameSplit[0] + '_initialised' + "." + fileNameSplit[1]
         catSegment(fileName_init, fileName, fileName_seg_initialised)
 
+'''
         fileName_seg_converted = baseWriteLocation + fileNameTemplate + str(i) + '_converted' + containerExtention
         scaleSegment(fileName_seg_initialised, fileName_seg_converted, 480, 360)'''
 
@@ -117,7 +131,23 @@ def parseMPD(mpd_url):
     base_stream_url = mpd.base_urls[0].base_url_value
     base_site_url = findBaseURL(mpd_url)
     base_url_final = base_site_url + base_stream_url
-    GetSegmentsV2(base_url_final, representationID+"/", 2, mpd_segment_template_string, representationID)
+
+    initSegmentTemplate = mpd.periods[0].adaptation_sets[0].segment_templates[0].initialization
+
+    # Calculate the duration of the video in seconds
+    durationHMS = isodate.parse_duration(mpd.media_presentation_duration)
+    durationS = durationHMS.total_seconds()
+    # Segment duration in frames
+    segmentDurationF = mpd.periods[0].adaptation_sets[0].segment_templates[0].duration
+    FPS = mpd.periods[0].adaptation_sets[0].segment_templates[0].timescale
+    # Segment duration in seconds
+    segmentDurationS = segmentDurationF / FPS
+    # Number of segments
+    nSegments = durationS / segmentDurationS
+    nSegments = math.ceil(nSegments)
+    print(nSegments)
+
+    GetSegmentsV2(base_url_final, representationID+"/", nSegments, mpd_segment_template_string, representationID, initSegmentTemplate)
 
 
 parseMPD(mpd_url)
