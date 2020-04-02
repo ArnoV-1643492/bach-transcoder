@@ -6,8 +6,8 @@ import datetime
 import math
 import os
 
-# mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
-mpd_url = 'https://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd'
+mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
+# mpd_url = 'https://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd'
 
 
 # Scale the segment to a different resolution
@@ -79,7 +79,7 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
     BaseSegmentName = segmentTemplate.replace("$RepresentationID$", representationID)
 
     # Init segment is 0, so start at 1 for data segments
-    for i in range(1,2):
+    for i in range(1,numberOfSegments):
         segmentName = BaseSegmentName.replace("$Number$", str(i))
         # The file we will call HTTP GET for
         getURL = baseURL + segmentName
@@ -102,9 +102,9 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
         print(fileNameSplit)
         catSegment(fileName_init, fileName, fileName_seg_initialised)
 
-'''
+
         fileName_seg_converted = baseWriteLocation + fileNameTemplate + str(i) + '_converted' + containerExtention
-        scaleSegment(fileName_seg_initialised, fileName_seg_converted, 480, 360)'''
+        scaleSegment(fileName_seg_initialised, fileName_seg_converted, 480, 360)
 
 
 # Finds the highest quality stream in MPD according to it's bandwidth
