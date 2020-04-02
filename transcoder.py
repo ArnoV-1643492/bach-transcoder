@@ -5,9 +5,10 @@ import isodate
 import datetime
 import math
 import os
+# from h26x_extractor import h26x_parser
 
-# mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
-mpd_url = 'https://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd'
+mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
+# mpd_url = 'https://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd'
 
 
 # Scale the segment to a different resolution
@@ -86,7 +87,6 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
         # The relative file location and name for the downloaded segment
         print(segmentName)
         fileName = segmentName
-        print(fileName)
         print("GET " + getURL)
         # Do HTTP GET
         urllib.request.urlretrieve(getURL, fileName)
@@ -97,14 +97,23 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
         for i in range(len(fileNameSplit) -2):
             fileName_seg_initialised += fileNameSplit[i] + "."
         fileName_seg_initialised += fileNameSplit[len(fileNameSplit) - 2] + '_initialised' + '.' + fileNameSplit[len(fileNameSplit) - 1]
-        # fileName_seg_initialised = fileNameSplit[0] + '_initialised' + "." + fileNameSplit[1]
-        print(fileName_seg_initialised)
-        print(fileNameSplit)
         catSegment(fileName_init, fileName, fileName_seg_initialised)
 
-'''
-        fileName_seg_converted = baseWriteLocation + fileNameTemplate + str(i) + '_converted' + containerExtention
-        scaleSegment(fileName_seg_initialised, fileName_seg_converted, 480, 360)'''
+        # Convert segments to new resolution
+        height = 360
+        width = 480
+        fileName_seg_converted = fileNameSplit[len(fileNameSplit) - 2] + '_converted_' + str(width) + 'x' + str(height) + '.' + fileNameSplit[len(fileNameSplit) - 1]
+        scaleSegment(fileName_seg_initialised, fileName_seg_converted, width, height)
+
+        # remove init data from segment
+        '''with open(fileName_seg_converted, 'r') as fin:
+            data = fin.read().splitlines(True)
+        with open(fileName_seg_converted, 'w') as fout:
+            fout.writelines(data[1:])
+        # with open(fileName_seg_converted, "rb") as videoInit:
+        # create parser
+        ex = h26x_parser.H26xParser(f=fileName_seg_converted, verbose=True)
+        ex.parse()'''
 
 
 # Finds the highest quality stream in MPD according to it's bandwidth
