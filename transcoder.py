@@ -7,6 +7,12 @@ import math
 import os
 # from h26x_extractor import h26x_parser
 
+# get current directory
+dir_path = os.path.dirname(os.path.realpath(__file__))
+print("------------------------------------------------")
+print(dir_path)
+print("------------------------------------------------")
+
 mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
 # mpd_url = 'https://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd'
 
