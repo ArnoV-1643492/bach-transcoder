@@ -86,7 +86,7 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
     BaseSegmentName = segmentTemplate.replace("$RepresentationID$", representationID)
 
     # Init segment is 0, so start at 1 for data segments
-    for i in range(1,2):
+    for i in range(1,numberOfSegments):
         segmentName = BaseSegmentName.replace("$Number$", str(i))
         # The file we will call HTTP GET for
         getURL = baseURL + segmentName
