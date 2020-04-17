@@ -5,6 +5,7 @@ import isodate
 import datetime
 import math
 import os
+import subprocess
 # from h26x_extractor import h26x_parser
 
 # get current directory
@@ -12,6 +13,8 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 print("------------------------------------------------")
 print(dir_path)
 print("------------------------------------------------")
+# change working directory
+os.chdir("/usr/share/nginx/html/")
 
 mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
 # mpd_url = 'https://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd'
@@ -109,6 +112,11 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
         height = 360
         width = 480
         fileName_seg_converted = fileNameSplit[len(fileNameSplit) - 2] + '_converted_' + str(width) + 'x' + str(height) + '.' + fileNameSplit[len(fileNameSplit) - 1]
+        
+        # ts test
+        # fileName_seg_converted = fileNameSplit[len(fileNameSplit) - 2] + '_converted_' + str(width) + 'x' + str(height) + '.' + 'ts'
+        # out = subprocess.run(["ffmpeg","-i",fileName_seg_initialised,"-filter","scale=480:360","-vb","20M","-c:a","copy",fileName_seg_converted])
+
         scaleSegment(fileName_seg_initialised, fileName_seg_converted, width, height)
 
         # remove init data from segment

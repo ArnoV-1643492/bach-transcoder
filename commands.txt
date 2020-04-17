@@ -1,3 +1,5 @@
 docker build -t python-transcoder .
 docker run python-transcoder 
 docker run -it python-transcoder sh
+
+MP4Box -dash 240 -rap -frag-rap  -bs-switching no -profile "dashavc264:live" "bbb_30fps_3840x2160_12000k/bbb_30fps_3840x2160_12000k_1_converted_480x360.m4v" -out "output.mpd"
