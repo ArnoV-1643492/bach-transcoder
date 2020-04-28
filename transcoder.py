@@ -14,7 +14,7 @@ print("------------------------------------------------")
 print(dir_path)
 print("------------------------------------------------")
 # change working directory
-os.chdir("/usr/share/nginx/html/")
+# os.chdir("/usr/share/nginx/html/")
 
 mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
 # mpd_url = 'https://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd'
@@ -34,10 +34,15 @@ def scaleSegment(inputSeg, outputSeg, output_width, output_height):
 
 
 # Concatenate a segment to the initial segment
-def catSegment(initSegment, segment, outputName):
-    with open(initSegment, "rb") as initFile, open(segment, "rb") as vidFile, open(outputName, "ab") as outputFile:
-        outputFile.write(initFile.read())
-        outputFile.write(vidFile.read())
+def catSegment(segment, outputName):
+    with open(segment, "rb") as segmentFile, open(outputName, "ab") as outputFile:
+        outputFile.write(segmentFile.read())
+
+
+# Copy data from one file to another
+def copySegment(orig, dest):
+    with open(orig, "rb") as origFile, open(dest, "ab") as outputFile:
+        outputFile.write(origFile.read())
 
 
 # HTTP GETs all the segments and saves them on disc
@@ -62,14 +67,14 @@ def GetSegments(baseURL, fileNameTemplate, baseWriteLocation, numberOfSegments, 
 
         # TODO: start a new thread here that transcodes the download file
         fileName_seg_initialised = baseWriteLocation + fileNameTemplate + str(i) + '_initialised' + containerExtention
-        catSegment(fileName_init, fileName, fileName_seg_initialised)
+        # catSegment(fileName_init, fileName, fileName_seg_initialised)
 
         fileName_seg_converted = baseWriteLocation + fileNameTemplate + str(i) + '_converted' + containerExtention
         scaleSegment(fileName_seg_initialised, fileName_seg_converted, 480, 360)
 
 
 # HTTP GETs all the segments and saves them on disc
-def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate, representationID, initSegmentTemplate):
+def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate, representationID, initSegmentTemplate, segmentsPerPeriod):
     
     # First download init segment
     initSegmentName = initSegmentTemplate.replace("$RepresentationID$", representationID)
@@ -93,46 +98,47 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
 
     BaseSegmentName = segmentTemplate.replace("$RepresentationID$", representationID)
 
+    periodNumber = 0
+    initSplit = initSegmentName.split(".")
+    origVideoExtention = initSplit[len(initSplit) -1]
+
+    i = 1
+    # TODO: what if i + segmentPerPeriod is larger than the numberOfSegments
+
     # Init segment is 0, so start at 1 for data segments
-    for i in range(1,numberOfSegments):
-        segmentName = BaseSegmentName.replace("$Number$", str(i))
-        # The file we will call HTTP GET for
-        getURL = baseURL + segmentName
-        # The relative file location and name for the downloaded segment
-        print(segmentName)
-        fileName = segmentName
-        print("GET " + getURL)
-        # Do HTTP GET
-        urllib.request.urlretrieve(getURL, fileName)
+    while(i < numberOfSegments):
 
-        # TODO: start a new thread here that transcodes the download file
-        fileNameSplit = fileName.split(".")
-        fileName_seg_initialised = ""
-        for i in range(len(fileNameSplit) -2):
-            fileName_seg_initialised += fileNameSplit[i] + "."
-        fileName_seg_initialised += fileNameSplit[len(fileNameSplit) - 2] + '_initialised' + '.' + fileNameSplit[len(fileNameSplit) - 1]
-        catSegment(fileName_init, fileName, fileName_seg_initialised)
+        periodName = representationID + "_period_" + str(periodNumber) + "." + origVideoExtention
+        # At the beginning of each period file we will place the init data
+        copySegment(initSegmentName, periodName)
 
-        # Convert segments to new resolution
+        print("i: " + str(i))
+
+        # Fetch all segments needed for current period
+        for j in range(i, i+segmentsPerPeriod):
+            
+            segmentName = BaseSegmentName.replace("$Number$", str(j))
+            # The file we will call HTTP GET for
+            getURL = baseURL + segmentName
+            # The relative file location and name for the downloaded segment
+            print(segmentName)
+            fileName = segmentName
+            print("GET " + getURL)
+            # Do HTTP GET
+            urllib.request.urlretrieve(getURL, fileName)
+
+            # Concat the segment to the rest of the period
+            catSegment(fileName, periodName)
+
+        # Convert period to new resolution
         height = 360
         width = 480
-        fileName_seg_converted = fileNameSplit[len(fileNameSplit) - 2] + '_converted_' + str(width) + 'x' + str(height) + '.' + fileNameSplit[len(fileNameSplit) - 1]
+        fileName_period_converted = representationID + "_period_" + str(periodNumber) + "_" + str(width) + 'x' + str(height) + '.' + origVideoExtention
+
+        scaleSegment(periodName, fileName_period_converted, width, height)
         
-        # ts test
-        # fileName_seg_converted = fileNameSplit[len(fileNameSplit) - 2] + '_converted_' + str(width) + 'x' + str(height) + '.' + 'ts'
-        # out = subprocess.run(["ffmpeg","-i",fileName_seg_initialised,"-filter","scale=480:360","-vb","20M","-c:a","copy",fileName_seg_converted])
-
-        scaleSegment(fileName_seg_initialised, fileName_seg_converted, width, height)
-
-        # remove init data from segment
-        '''with open(fileName_seg_converted, 'r') as fin:
-            data = fin.read().splitlines(True)
-        with open(fileName_seg_converted, 'w') as fout:
-            fout.writelines(data[1:])
-        # with open(fileName_seg_converted, "rb") as videoInit:
-        # create parser
-        ex = h26x_parser.H26xParser(f=fileName_seg_converted, verbose=True)
-        ex.parse()'''
+        periodNumber = periodNumber + 1
+        i = j + 1
 
 
 # Finds the highest quality stream in MPD according to it's bandwidth
@@ -188,7 +194,7 @@ def parseMPD(mpd_url):
     nSegments = math.ceil(nSegments)
     print(nSegments)
 
-    GetSegmentsV2(base_url_final, representationID+"/", nSegments, mpd_segment_template_string, representationID, initSegmentTemplate)
+    GetSegmentsV2(base_url_final, representationID+"/", nSegments, mpd_segment_template_string, representationID, initSegmentTemplate, 4)
 
 
 parseMPD(mpd_url)

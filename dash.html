@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Dash.js</title>
+        <style>
+            video {
+                width: 640px;
+                height: 360px;
+            }
+        </style>
+    </head>
+    <body>
+        <div>
+            <video id="videoPlayer" controls></video>
+        </div>
+        <script src="http://reference.dashif.org/dash.js/latest/dist/dash.all.debug.js"></script>
+        <script>
+            (function(){
+                var url = "./bbb_30fps_periods.mpd";
+                var player = dashjs.MediaPlayer().create();
+                player.initialize(document.querySelector("#videoPlayer"), url, true);
+            })();
+        </script>
+    </body>
+</html>
