@@ -25,7 +25,12 @@ def scaleSegment(inputSeg, outputSeg, output_width, output_height):
     stream = ffmpeg.input(inputSeg)
     stream = ffmpeg.filter(stream, 'scale', width=output_width, height=output_height)
     stream = ffmpeg.output(stream, outputSeg)
+    compileStr = ffmpeg.compile(stream)
+    print(compileStr)
     ffmpeg.run(stream)
+    print(outputSeg)
+    # out = subprocess.run(["ffmpeg","-y","-i",inputSeg,"-vf", "scale=480:360", "-f","mp4","-movflags", "frag_keyframe+omit_tfhd_offset+empty_moov", outputSeg])
+
 
 
 # Concatenate a segment to the initial segment
