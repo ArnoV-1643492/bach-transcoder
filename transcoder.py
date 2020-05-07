@@ -14,7 +14,7 @@ print("------------------------------------------------")
 print(dir_path)
 print("------------------------------------------------")
 # change working directory
-# os.chdir("/usr/share/nginx/html/")
+os.chdir("/usr/share/nginx/html/")
 
 mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
 # mpd_url = 'https://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd'
@@ -43,6 +43,53 @@ def catSegment(segment, outputName):
 def copySegment(orig, dest):
     with open(orig, "rb") as origFile, open(dest, "ab") as outputFile:
         outputFile.write(origFile.read())
+
+
+# Gets period video as input and creates a DASH period using MP4Box
+def makePeriod(periodName, MPDName, segmentSize, fragmentSize):
+    # Run MP4Box
+    #  "-url-template", wtih segmentSize 1000 for segmentTemplate instead of segmentlist
+    subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-frag", str(fragmentSize), "-out", MPDName, periodName])
+
+
+# Create the new MPD file
+def createMPD(MPDName):
+    with open(MPDName, "ab") as MPD:
+        return
+
+
+# Add new Period to MPD
+def addPeriodToMPD(MPDName, periodMPDName, periodNumber):
+    #with open(MPDName, "ab") as MPD, open(periodMPDName, "rb") as periodMPDName:
+    # Add period
+    MPD_parse = MPEGDASHParser.parse(MPDName)
+    Period_parse = MPEGDASHParser.parse(periodMPDName)
+    # Give new id to period
+    Period_parse.periods[0].id = periodNumber
+    MPD_parse.periods.append(Period_parse.periods[0])
+
+    # Write new verion of MPD
+    MPEGDASHParser.write(MPD_parse, MPDName)
+
+
+# Copy one MPD into antoher MPD (used for the first MPD generation)
+def copyMPD(MPDName, periodMPDName, MPDuration, periodNumber):
+    #with open(MPDName, "ab") as MPD, open(periodMPDName, "rb") as period:
+    #    MPD.write(period.read())
+    
+    # Change duration
+    MPD_parse = MPEGDASHParser.parse(periodMPDName)
+    # Give new id to period
+    MPD_parse.periods[0].id = periodNumber
+    MPD_parse.media_presentation_duration = MPDuration
+    # Change MPD to dynamic
+    MPD_parse.type = "dynamic"
+    MPD_parse.minimum_update_period="PT0H0M1.00S"
+    MPD_parse.time_shift_buffer_depth="PT400S"
+    MPD_parse.availability_start_time="2020-05-03T18:38:00Z"
+
+    # Write
+    MPEGDASHParser.write(MPD_parse, MPDName)
 
 
 # HTTP GETs all the segments and saves them on disc
@@ -74,7 +121,7 @@ def GetSegments(baseURL, fileNameTemplate, baseWriteLocation, numberOfSegments, 
 
 
 # HTTP GETs all the segments and saves them on disc
-def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate, representationID, initSegmentTemplate, segmentsPerPeriod):
+def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate, representationID, initSegmentTemplate, segmentsPerPeriod, MPDuration):
     
     # First download init segment
     initSegmentName = initSegmentTemplate.replace("$RepresentationID$", representationID)
@@ -97,6 +144,11 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
     urllib.request.urlretrieve(getURL_init, fileName_init)
 
     BaseSegmentName = segmentTemplate.replace("$RepresentationID$", representationID)
+
+    # MPD name
+    MPDName = representationID + "_local_" + ".mpd"
+    # Create MPD
+    createMPD(MPDName)
 
     periodNumber = 0
     initSplit = initSegmentName.split(".")
@@ -134,8 +186,21 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
         height = 360
         width = 480
         fileName_period_converted = representationID + "_period_" + str(periodNumber) + "_" + str(width) + 'x' + str(height) + '.' + origVideoExtention
-
+        fileName_period_MPD = representationID + "_period_" + str(periodNumber) + "_" + str(width) + 'x' + str(height) + '.mpd'
+        # Transcode
         scaleSegment(periodName, fileName_period_converted, width, height)
+
+        # Make period
+        # TODO: decide segmentsize and fragment size
+        makePeriod(fileName_period_converted, fileName_period_MPD, 4000, 2000)
+
+        # Update final MPD
+        # If this is the first period, copy the created MPD
+        if (i == 1):
+            copyMPD(MPDName, fileName_period_MPD, MPDuration, periodNumber)
+        # Otherwise, add the created period to the existing MPD
+        else:
+            addPeriodToMPD(MPDName, fileName_period_MPD, periodNumber)
         
         periodNumber = periodNumber + 1
         i = j + 1
@@ -194,7 +259,7 @@ def parseMPD(mpd_url):
     nSegments = math.ceil(nSegments)
     print(nSegments)
 
-    GetSegmentsV2(base_url_final, representationID+"/", nSegments, mpd_segment_template_string, representationID, initSegmentTemplate, 4)
+    GetSegmentsV2(base_url_final, representationID+"/", nSegments, mpd_segment_template_string, representationID, initSegmentTemplate, 4, mpd.media_presentation_duration)
 
 
 parseMPD(mpd_url)
