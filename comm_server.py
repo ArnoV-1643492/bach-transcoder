@@ -3,6 +3,8 @@
 
 from flask import Flask, request, make_response, jsonify, abort
 import json
+import threading
+from transcoder import startStream, Stream_Info
 
 # Define error class
 class ServerExcpetion(Exception):
@@ -28,10 +30,21 @@ def getMedia():
         WANTED_HEIGHT = data["WANTED_HEIGHT"]
         print(MPD_URL, WANTED_WIDTH, WANTED_HEIGHT)
 
-        response = make_response(MPD_URL)
+        # Start thread
+        streaminfo = Stream_Info()
+        mpd_available = threading.Event()
+        thread = threading.Thread(target=startStream, args=(MPD_URL, streaminfo, mpd_available))
+        print("Starting thread")
+        thread.start()
+
+        # wait here for the result to be available before continuing
+        mpd_available.wait()
+
+        response = make_response(streaminfo.mpd_url)
         response.headers['Content-Type'] = 'text/xml'
         return response
-    except:
+    except Exception as err:
+        print(err)
         abort(500)
 
 
