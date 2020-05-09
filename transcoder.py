@@ -6,6 +6,7 @@ import datetime
 import math
 import os
 import subprocess
+import threading
 # from h26x_extractor import h26x_parser
 
 # get current directory
@@ -14,10 +15,15 @@ print("------------------------------------------------")
 print(dir_path)
 print("------------------------------------------------")
 # change working directory
-os.chdir("/usr/share/nginx/html/")
+rootDir = "/usr/share/nginx/html/"
+os.chdir(rootDir)
 
 mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
 # mpd_url = 'https://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd'
+
+class Stream_Info:
+    mpd_url = ""
+    stream_id = 0
 
 
 # Scale the segment to a different resolution
@@ -121,7 +127,7 @@ def GetSegments(baseURL, fileNameTemplate, baseWriteLocation, numberOfSegments, 
 
 
 # HTTP GETs all the segments and saves them on disc
-def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate, representationID, initSegmentTemplate, segmentsPerPeriod, MPDuration):
+def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate, representationID, initSegmentTemplate, segmentsPerPeriod, MPDuration, stream_name, streaminfo, mpd_available):
     
     # First download init segment
     initSegmentName = initSegmentTemplate.replace("$RepresentationID$", representationID)
@@ -146,7 +152,7 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
     BaseSegmentName = segmentTemplate.replace("$RepresentationID$", representationID)
 
     # MPD name
-    MPDName = representationID + "_local_" + ".mpd"
+    MPDName = stream_name + "_local_" + ".mpd"
     # Create MPD
     createMPD(MPDName)
 
@@ -178,8 +184,6 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
             print("GET " + getURL)
             # Do HTTP GET
             urllib.request.urlretrieve(getURL, fileName)
-
-            # Concat the segment to the rest of the period
             catSegment(fileName, periodName)
 
         # Convert period to new resolution
@@ -198,6 +202,9 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
         # If this is the first period, copy the created MPD
         if (i == 1):
             copyMPD(MPDName, fileName_period_MPD, MPDuration, periodNumber)
+            # Notify parent thread that first period is finished
+            streaminfo.mpd_url = MPDName
+            mpd_available.set()
         # Otherwise, add the created period to the existing MPD
         else:
             addPeriodToMPD(MPDName, fileName_period_MPD, periodNumber)
@@ -229,7 +236,7 @@ def findBaseURL(mpd_url):
     return append
 
 
-def parseMPD(mpd_url):
+def parseMPD(mpd_url, stream_name, streaminfo, mpd_available):
     mpd = MPEGDASHParser.parse(mpd_url)
     mpd_representations = mpd.periods[0].adaptation_sets[0].representations
     stream = MPD_FindHighestStream(mpd_representations)
@@ -259,10 +266,46 @@ def parseMPD(mpd_url):
     nSegments = math.ceil(nSegments)
     print(nSegments)
 
-    GetSegmentsV2(base_url_final, representationID+"/", nSegments, mpd_segment_template_string, representationID, initSegmentTemplate, 4, mpd.media_presentation_duration)
+    GetSegmentsV2(base_url_final, representationID+"/", nSegments, mpd_segment_template_string, representationID, initSegmentTemplate, 4, mpd.media_presentation_duration, stream_name, streaminfo, mpd_available)
 
 
-parseMPD(mpd_url)
+# This is the start of the thread that downloads videos and transcodes them
+def startStream(mpd_url, streaminfo, mpd_available):
+    # Make new directory for all files
+    mpd_url_split = mpd_url.split("/")
+    # Last element is MPD name
+    mpd_name = mpd_url_split[-1]
+    # Stream name will be MPD name without the MPD extention
+    mpd_name_split = mpd_name.split(".")
+    stream_name = mpd_name_split[0]
+
+    # Make a directory for the stream and change working directory
+    os.mkdir(rootDir + stream_name)
+    os.chdir(rootDir + stream_name)
+
+    # Start parsing and transcoding
+    parseMPD(mpd_url,stream_name, streaminfo, mpd_available)
+
+
+# parseMPD(mpd_url)
+# startStream(mpd_url)
+
+'''
+# tread test
+def main():
+    streaminfo = Stream_Info()
+    mpd_available = threading.Event()
+    thread = threading.Thread(target=startStream, args=(mpd_url, streaminfo, mpd_available))
+    thread.start()
+
+    # wait here for the result to be available before continuing
+    mpd_available.wait()
+
+    print('The result is', streaminfo.mpd_url)
+
+if __name__ == '__main__':
+    main()
+'''
 
 # GetSegments('https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps_3840x2160_12000k/','bbb_30fps_3840x2160_12000k_', 'bbb_30fps_3840x2160_12000k/', 2, '.m4v')
 
