@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Shaka</title>
+        <style>
+            video {
+                width: 640px;
+                height: 360px;
+            }
+        </style>
+    </head>
+    <body>
+        <div>
+            <video id="video" controls autoplay></video>
+        </div>
+        <div>
+          <input type="text" id="MPDURL"></input>
+        </div>
+        <button onclick="startVideo()">Play</button>
+        <!-- Shaka Player debug library: -->
+        <script src="https://ajax.googleapis.com/ajax/libs/shaka-player/2.5.10/shaka-player.compiled.debug.js"></script>
+        <!-- <script src="https://ajax.googleapis.com/ajax/libs/shaka-player/2.5.10/shaka-player.compiled.js"></script> -->
+        <script>
+
+var manifestUri = 'http://localhost:8000/bbb_30fps_3840x2160_12000k_local_.mpd';
+
+function initApp() {
+  // Install built-in polyfills to patch browser incompatibilities.
+  shaka.polyfill.installAll();
+
+  // Check to see if the browser supports the basic APIs Shaka needs.
+  if (shaka.Player.isBrowserSupported()) {
+    // Everything looks good!
+    initPlayer();
+  } else {
+    // This browser does not have the minimum set of APIs we need.
+    console.error('Browser not supported!');
+  }
+}
+
+function initPlayer() {
+  // Create a Player instance.
+  var video = document.getElementById('video');
+  var player = new shaka.Player(video);
+
+  // Attach player to the window to make it easy to access in the JS console.
+  window.player = player;
+
+  // Listen for error events.
+  player.addEventListener('error', onErrorEvent);
+
+}
+
+function startVideo() {
+  var http = new XMLHttpRequest();
+  var MPDURL = document.getElementById("MPDURL").value;
+  var url = "http://localhost:5000/media/";
+  var params = JSON.stringify(
+    {
+      MPD_URL: "https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd",
+      WANTED_WIDTH: 480,
+      WANTED_HEIGHT: 360
+    }
+  );
+  http.open("POST", url, true);
+
+  http.setRequestHeader("Content-type", "application/json; charset=utf-8");
+  // http.setRequestHeader("Content-length", params.length);
+  // http.setRequestHeader("Connection", "close");
+  http.onload  = function() {
+    var jsonResponse = JSON.parse(http.responseText);
+
+    var responseMPDURL = MPDURL
+    // If new MPD was generated, use new, otherwise use original url
+    if (jsonResponse.STREAM_AVAILABLE){
+      responseMPDURL = "http://localhost/" + jsonResponse.STREAM_INFO.LOCAL_MPD_URL;
+    }
+
+    // Try to load manifest.
+    // This is an asynchronous process.
+    player.load(responseMPDURL).then(function() {
+      // This runs if the asynchronous load is successful.
+      console.log('The video has now been loaded!');
+    }).catch(onError);  // onError is executed if the asynchronous load fails.
+  };
+  http.send(params);
+
+}
+
+function onErrorEvent(event) {
+  // Extract the shaka.util.Error object from the event.
+  onError(event.detail);
+}
+
+function onError(error) {
+  // Log the error.
+  console.error('Error code', error.code, 'object', error);
+}
+
+document.addEventListener('DOMContentLoaded', initApp);
+        </script>
+    </body>
+</html>
