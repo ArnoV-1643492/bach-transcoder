@@ -2,6 +2,7 @@
 # It will directly access methods from the transcoder
 
 from flask import Flask, request, make_response, jsonify, abort
+from flask_cors import CORS
 import json
 import threading
 from transcoder import startStream, Stream_Info
@@ -12,6 +13,7 @@ class ServerExcpetion(Exception):
 
 
 app = Flask(__name__)
+CORS(app)
 
 
 @app.route('/')
@@ -20,7 +22,7 @@ def hello():
 
 
 # Initial request for video
-@app.route('/media/', methods=['GET'])
+@app.route('/media/', methods=['POST'])
 def getMedia():
     try:
         # Get values
@@ -40,8 +42,10 @@ def getMedia():
         # wait here for the result to be available before continuing
         mpd_available.wait()
 
-        response = make_response(streaminfo.mpd_url)
-        response.headers['Content-Type'] = 'text/xml'
+        response = make_response(json.dumps({"STREAM_AVAILABLE": True, "STREAM_INFO": {"LOCAL_MPD_URL": streaminfo.stream_name + "/" + streaminfo.mpd_url}}))
+        response.headers['Content-Type'] = 'application/json'
+        # response = make_response(streaminfo.mpd_url)
+        # response.headers['Content-Type'] = 'text/xml'
         return response
     except Exception as err:
         print(err)
