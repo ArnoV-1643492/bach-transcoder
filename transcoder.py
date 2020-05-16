@@ -55,7 +55,7 @@ def copySegment(orig, dest):
 def makePeriod(periodName, MPDName, segmentSize, fragmentSize):
     # Run MP4Box
     #  "-url-template", wtih segmentSize 1000 for segmentTemplate instead of segmentlist
-    subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-frag", str(fragmentSize), "-out", MPDName, periodName])
+    subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-segment-timeline", "-frag", str(fragmentSize), "-out", MPDName, periodName])
 
 
 # Create the new MPD file
@@ -282,6 +282,8 @@ def startStream(mpd_url, streaminfo, mpd_available):
     # Make a directory for the stream and change working directory
     os.mkdir(rootDir + stream_name)
     os.chdir(rootDir + stream_name)
+
+    streaminfo.stream_name = stream_name
 
     # Start parsing and transcoding
     parseMPD(mpd_url,stream_name, streaminfo, mpd_available)
