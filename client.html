@@ -57,7 +57,8 @@ function startVideo() {
   var url = "http://localhost:5000/media/";
   var params = JSON.stringify(
     {
-      MPD_URL: "https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd",
+      //MPD_URL: "https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd",
+      MPD_URL: MPDURL,
       WANTED_WIDTH: 480,
       WANTED_HEIGHT: 360
     }

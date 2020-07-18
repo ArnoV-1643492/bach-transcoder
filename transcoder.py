@@ -7,6 +7,7 @@ import math
 import os
 import subprocess
 import threading
+import json
 # from h26x_extractor import h26x_parser
 
 # get current directory
@@ -18,17 +19,83 @@ print("------------------------------------------------")
 rootDir = "/usr/share/nginx/html/"
 os.chdir(rootDir)
 
-mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
+# This is where the information of the currently stored streams is kept
+streamMapName = "streamMap.json"
+
+# mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
 # mpd_url = 'https://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd'
 
 class Stream_Info:
     mpd_url = ""
     stream_id = 0
+    stream_name = ""
+
+
+# Add a new stream to the stream map
+# periodBase name is the first part of the name of the concatenated periods
+# periodNameEnd is the part of the name that comes after the index of the period
+def addStreamMap(streamDir, mpd_url, periodBaseName, periodNameEnd, MPDName, stream_name):
+    mapData = {}
+    mapData["streamList"] = []
+    try:
+        with open(rootDir + streamMapName) as map:
+            mapData = json.load(map)
+    except IOError:
+        print("stream map does not exist, file will be created")
+
+    # Create JSON object
+    stream = {}
+    stream["streamDir"] = streamDir
+    stream["periodBaseName"] = periodBaseName
+    stream["periodNameEnd"] = periodNameEnd
+    stream["mpd_url"] = mpd_url
+    stream["MPDName"] = MPDName
+    stream["stream_name"] = stream_name
+    mapData["streamList"].append(stream)
+
+    # Write to file
+    with open(rootDir + streamMapName, 'w+') as outfile:
+        json.dump(mapData, outfile)
+
+
+# Checks if the given stream already exists locally, returns bool
+def streamInMap(mpd_url):
+    try:
+        with open(rootDir + streamMapName) as map:
+            mapData = json.load(map)
+            for stream in mapData["streamList"]:
+                # Stream found
+                if stream["mpd_url"] == mpd_url:
+                    return True
+            # Stream not found
+            return False
+    except IOError:
+        # Map does not yet exist, there are no streams locally
+        return False
+
+
+# If a stream already exists, the return for the parent thread will be created
+def returnExistingStream(mpd_url, streaminfo, mpd_available):
+    with open(rootDir + streamMapName) as map:
+        mapData = json.load(map)
+        for stream in mapData["streamList"]:
+            # Stream found
+            if stream["mpd_url"] == mpd_url:
+                streaminfo.stream_name = stream["stream_name"]
+                streaminfo.mpd_url = stream["MPDName"]
+                mpd_available.set()
 
 
 # Scale the segment to a different resolution
 def scaleSegment(inputSeg, outputSeg, output_width, output_height):
-    stream = ffmpeg.input(inputSeg)
+    input_args = {
+        "hwaccel": "nvdec",
+        "vcodec": "h264_cuvid",
+        "c:v": "h264_cuvid",
+        "analyzeduration": "2147483647",
+        "probesize": "2147483647"
+    }
+    stream = ffmpeg.input(inputSeg, **input_args)
     stream = ffmpeg.filter(stream, 'scale', width=output_width, height=output_height)
     stream = ffmpeg.output(stream, outputSeg)
     compileStr = ffmpeg.compile(stream)
@@ -55,7 +122,10 @@ def copySegment(orig, dest):
 def makePeriod(periodName, MPDName, segmentSize, fragmentSize):
     # Run MP4Box
     #  "-url-template", wtih segmentSize 1000 for segmentTemplate instead of segmentlist
-    subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-segment-timeline", "-frag", str(fragmentSize), "-out", MPDName, periodName])
+    # , "-segment-timeline" , "-segment-name", "\"$RepresentationID$_$Number$$Init=i$\"",
+    # subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-segment-timeline", "-frag", str(fragmentSize), "-out", MPDName, periodName])
+    subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-frag", str(fragmentSize), "-segment-timeline", "-out", MPDName, periodName])
+    # subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-frag-rap", "-bs-switching", "inband", "-out", MPDName, periodName, "-url-template"])
 
 
 # Create the new MPD file
@@ -72,6 +142,12 @@ def addPeriodToMPD(MPDName, periodMPDName, periodNumber):
     Period_parse = MPEGDASHParser.parse(periodMPDName)
     # Give new id to period
     Period_parse.periods[0].id = periodNumber
+    '''period_duration = Period_parse.periods[0].duration
+    durationHMS = isodate.parse_duration(period_duration)
+    durationS = durationHMS.total_seconds()
+    durationS = durationS * 2
+    newduartion = datetime.timedelta(seconds=durationS)
+    Period_parse.periods[0].duration = newduartion'''
     MPD_parse.periods.append(Period_parse.periods[0])
 
     # Write new verion of MPD
@@ -127,7 +203,7 @@ def GetSegments(baseURL, fileNameTemplate, baseWriteLocation, numberOfSegments, 
 
 
 # HTTP GETs all the segments and saves them on disc
-def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate, representationID, initSegmentTemplate, segmentsPerPeriod, MPDuration, stream_name, streaminfo, mpd_available):
+def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate, representationID, initSegmentTemplate, segmentsPerPeriod, MPDuration, stream_name, streaminfo, mpd_available, streamDir, mpd_url):
     
     # First download init segment
     initSegmentName = initSegmentTemplate.replace("$RepresentationID$", representationID)
@@ -160,6 +236,9 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
     initSplit = initSegmentName.split(".")
     origVideoExtention = initSplit[len(initSplit) -1]
 
+    # Add stream to map
+    addStreamMap(streamDir, mpd_url, representationID + "_period_", origVideoExtention, MPDName, stream_name)
+
     i = 1
     # TODO: what if i + segmentPerPeriod is larger than the numberOfSegments
 
@@ -174,6 +253,10 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
 
         # Fetch all segments needed for current period
         for j in range(i, i+segmentsPerPeriod):
+
+            # check if we have reached the last segement
+            if (i+segmentsPerPeriod >= numberOfSegments):
+                break
             
             segmentName = BaseSegmentName.replace("$Number$", str(j))
             # The file we will call HTTP GET for
@@ -236,7 +319,7 @@ def findBaseURL(mpd_url):
     return append
 
 
-def parseMPD(mpd_url, stream_name, streaminfo, mpd_available):
+def parseMPD(mpd_url, stream_name, streaminfo, mpd_available, streamDir):
     mpd = MPEGDASHParser.parse(mpd_url)
     mpd_representations = mpd.periods[0].adaptation_sets[0].representations
     stream = MPD_FindHighestStream(mpd_representations)
@@ -266,27 +349,33 @@ def parseMPD(mpd_url, stream_name, streaminfo, mpd_available):
     nSegments = math.ceil(nSegments)
     print(nSegments)
 
-    GetSegmentsV2(base_url_final, representationID+"/", nSegments, mpd_segment_template_string, representationID, initSegmentTemplate, 4, mpd.media_presentation_duration, stream_name, streaminfo, mpd_available)
+    GetSegmentsV2(base_url_final, representationID+"/", nSegments, mpd_segment_template_string, representationID, initSegmentTemplate, 4, mpd.media_presentation_duration, stream_name, streaminfo, mpd_available, streamDir, mpd_url)
 
 
 # This is the start of the thread that downloads videos and transcodes them
 def startStream(mpd_url, streaminfo, mpd_available):
-    # Make new directory for all files
-    mpd_url_split = mpd_url.split("/")
-    # Last element is MPD name
-    mpd_name = mpd_url_split[-1]
-    # Stream name will be MPD name without the MPD extention
-    mpd_name_split = mpd_name.split(".")
-    stream_name = mpd_name_split[0]
+    # First, check if the stream already exists locally
+    if streamInMap(mpd_url):
+        returnExistingStream(mpd_url, streaminfo, mpd_available)
 
-    # Make a directory for the stream and change working directory
-    os.mkdir(rootDir + stream_name)
-    os.chdir(rootDir + stream_name)
+    else: 
+        # Make new directory for all files
+        mpd_url_split = mpd_url.split("/")
+        # Last element is MPD name
+        mpd_name = mpd_url_split[-1]
+        # Stream name will be MPD name without the MPD extention
+        mpd_name_split = mpd_name.split(".")
+        stream_name = mpd_name_split[0]
 
-    streaminfo.stream_name = stream_name
+        # Make a directory for the stream and change working directory
+        streamDir = rootDir + stream_name
+        os.mkdir(streamDir)
+        os.chdir(streamDir)
 
-    # Start parsing and transcoding
-    parseMPD(mpd_url,stream_name, streaminfo, mpd_available)
+        streaminfo.stream_name = stream_name
+
+        # Start parsing and transcoding
+        parseMPD(mpd_url,stream_name, streaminfo, mpd_available, streamDir)
 
 
 # parseMPD(mpd_url)
