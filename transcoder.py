@@ -29,12 +29,14 @@ class Stream_Info:
     mpd_url = ""
     stream_id = 0
     stream_name = ""
+    width = 0
+    height = 0
 
 
 # Add a new stream to the stream map
 # periodBase name is the first part of the name of the concatenated periods
 # periodNameEnd is the part of the name that comes after the index of the period
-def addStreamMap(streamDir, mpd_url, periodBaseName, periodNameEnd, MPDName, stream_name):
+def addStreamMap(streamDir, mpd_url, periodBaseName, periodNameEnd, MPDName, stream_name, representationWidth, representationHeight, numberOfSegments):
     mapData = {}
     mapData["streamList"] = []
     try:
@@ -51,7 +53,35 @@ def addStreamMap(streamDir, mpd_url, periodBaseName, periodNameEnd, MPDName, str
     stream["mpd_url"] = mpd_url
     stream["MPDName"] = MPDName
     stream["stream_name"] = stream_name
+    stream["numberOfSegments"] = numberOfSegments
+
+    # Add the current representation to the stream as well
+    representation = {}
+    representation["width"] = representationWidth
+    representation["heigth"] = representationHeight
+    stream["representations"] = []
+    stream["representations"].append(representation)
+
     mapData["streamList"].append(stream)
+
+    # Write to file
+    with open(rootDir + streamMapName, 'w+') as outfile:
+        json.dump(mapData, outfile)
+
+# Add a representation to the stream map for an existing stream
+def addRepresentationToStreamMap(mpd_url, representationWidth, representationHeight):
+    with open(rootDir + streamMapName) as map:
+        mapData = json.load(map)
+
+    # Loop through all streams to find the correct stream
+    for i in range(0,len(mapData["streamList"])):
+        # Stream found
+        if mapData["streamList"][i]["mpd_url"] == mpd_url:
+            # stream found, add representation
+            representation = {}
+            representation["width"] = representationWidth
+            representation["heigth"] = representationHeight
+            mapData["streamList"][i]["representations"].append(representation)
 
     # Write to file
     with open(rootDir + streamMapName, 'w+') as outfile:
@@ -124,7 +154,7 @@ def makePeriod(periodName, MPDName, segmentSize, fragmentSize):
     #  "-url-template", wtih segmentSize 1000 for segmentTemplate instead of segmentlist
     # , "-segment-timeline" , "-segment-name", "\"$RepresentationID$_$Number$$Init=i$\"",
     # subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-segment-timeline", "-frag", str(fragmentSize), "-out", MPDName, periodName])
-    subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-frag", str(fragmentSize), "-segment-timeline", "-out", MPDName, periodName])
+    subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-frag", str(fragmentSize), "-segment-timeline", "-out", MPDName, periodName, periodName])
     # subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-frag-rap", "-bs-switching", "inband", "-out", MPDName, periodName, "-url-template"])
 
 
@@ -148,7 +178,32 @@ def addPeriodToMPD(MPDName, periodMPDName, periodNumber):
     durationS = durationS * 2
     newduartion = datetime.timedelta(seconds=durationS)
     Period_parse.periods[0].duration = newduartion'''
+
+    # Remove all exess representations from Period MPD
+    if (len(Period_parse.periods[0].adaptation_sets[0].representations) > 1):
+        for i in range(1, len(Period_parse.periods[0].adaptation_sets[0].representations)):
+            del Period_parse.periods[0].adaptation_sets[0].representations[i]
+    # Change representation id of the only representation left in Period MPD
+    Period_parse.periods[0].adaptation_sets[0].representations[0].id = 1
+
     MPD_parse.periods.append(Period_parse.periods[0])
+
+    # Write new verion of MPD
+    MPEGDASHParser.write(MPD_parse, MPDName)
+
+def addRepresentationToMPD(MPDName, periodMPDName, periodNumber):
+    MPD_parse = MPEGDASHParser.parse(MPDName)
+    Period_parse = MPEGDASHParser.parse(periodMPDName)
+    # Remove all exess representations from Period MPD
+    if (len(Period_parse.periods[0].adaptation_sets[0].representations) > 1):
+        for i in range(1, len(Period_parse.periods[0].adaptation_sets[0].representations)):
+            del Period_parse.periods[0].adaptation_sets[0].representations[i]
+    # Count number of representations already in final MPD
+    numberOfReps = len(MPD_parse.periods[periodNumber].adaptation_sets[0].representations)
+    # Change representation id of the only representation left in Period MPD
+    Period_parse.periods[0].adaptation_sets[0].representations[0].id = numberOfReps + 1
+    # Add the representation to the final MPD
+    MPD_parse.periods[periodNumber].adaptation_sets[0].representations.append(Period_parse.periods[0].adaptation_sets[0].representations[0])
 
     # Write new verion of MPD
     MPEGDASHParser.write(MPD_parse, MPDName)
@@ -167,8 +222,13 @@ def copyMPD(MPDName, periodMPDName, MPDuration, periodNumber):
     # Change MPD to dynamic
     MPD_parse.type = "dynamic"
     MPD_parse.minimum_update_period="PT0H0M1.00S"
-    MPD_parse.time_shift_buffer_depth="PT400S"
+    MPD_parse.time_shift_buffer_depth=MPDuration
     MPD_parse.availability_start_time="2020-05-03T18:38:00Z"
+
+    # Remove all exess representations from Period MPD
+    if (len(MPD_parse.periods[0].adaptation_sets[0].representations) > 1):
+        for i in range(1, len(MPD_parse.periods[0].adaptation_sets[0].representations)):
+            del MPD_parse.periods[0].adaptation_sets[0].representations[i]
 
     # Write
     MPEGDASHParser.write(MPD_parse, MPDName)
@@ -237,10 +297,9 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
     origVideoExtention = initSplit[len(initSplit) -1]
 
     # Add stream to map
-    addStreamMap(streamDir, mpd_url, representationID + "_period_", origVideoExtention, MPDName, stream_name)
+    addStreamMap(streamDir, mpd_url, representationID + "_period_", origVideoExtention, MPDName, stream_name, streaminfo.width, streaminfo.height, numberOfSegments)
 
     i = 1
-    # TODO: what if i + segmentPerPeriod is larger than the numberOfSegments
 
     # Init segment is 0, so start at 1 for data segments
     while(i < numberOfSegments):
@@ -270,8 +329,8 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
             catSegment(fileName, periodName)
 
         # Convert period to new resolution
-        height = 360
-        width = 480
+        height = streaminfo.height
+        width = streaminfo.width
         fileName_period_converted = representationID + "_period_" + str(periodNumber) + "_" + str(width) + 'x' + str(height) + '.' + origVideoExtention
         fileName_period_MPD = representationID + "_period_" + str(periodNumber) + "_" + str(width) + 'x' + str(height) + '.mpd'
         # Transcode
@@ -294,6 +353,65 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
         
         periodNumber = periodNumber + 1
         i = j + 1
+
+# This method will use already cached video segments to transcode them to a new resolution
+def GetSegmentsExistingStream(mpd_url, streaminfo, segmentsPerPeriod):
+    addRepresentationToStreamMap(mpd_url, streaminfo.width, streaminfo.height)
+
+    numberOfSegments = 0
+    periodBaseName = ""
+    periodNameEnd = ""
+    stream_name = ""
+    MPDName = ""
+
+    # Get the needed information out of the stream map
+    with open(rootDir + streamMapName) as map:
+        mapData = json.load(map)
+        # loop through all the streams to find the correct one
+        streamList = mapData["streamList"]
+        for stream in streamList:
+            if stream["mpd_url"] == mpd_url:
+                numberOfSegments = stream["numberOfSegments"]
+                periodBaseName = stream["periodBaseName"]
+                periodNameEnd = stream["periodNameEnd"]
+                stream_name = stream["stream_name"]
+                MPDName = stream["MPDName"]
+                break
+
+    # Change working directory to cached video directory
+    streamDir = rootDir + stream_name
+    os.chdir(streamDir)
+
+    # Segmentcounter
+    i = 1
+    # Period counter
+    periodNumber = 0
+    # Init segment is 0, so start at 1 for data segments
+    while(i < numberOfSegments):
+        # We already concatenated the needed segments in GetSegmentsV2 when this stream was first cached
+        # We only need to take that video and transcode it again to a new resolution
+        periodName = periodBaseName + str(periodNumber) + "." + periodNameEnd
+
+        # Convert period to new resolution
+        height = streaminfo.height
+        width = streaminfo.width
+        # Name of the transcoded video
+        fileName_period_converted = periodBaseName + str(periodNumber) + "_" + str(width) + 'x' + str(height) + "." + periodNameEnd
+        fileName_period_MPD = periodBaseName + str(periodNumber) + "_" + str(width) + 'x' + str(height) + '.mpd'
+        # Transcode
+        print("Period video name: " + periodName)
+        print("Period converted name: " + fileName_period_converted)
+        scaleSegment(periodName, fileName_period_converted, width, height)
+
+        # Make period
+        # TODO: decide segmentsize and fragment size
+        makePeriod(fileName_period_converted, fileName_period_MPD, 4000, 2000)
+
+        # Add representation to the existing MPD
+        addRepresentationToMPD(MPDName, fileName_period_MPD, periodNumber)
+
+        periodNumber = periodNumber + 1
+        i = i + segmentsPerPeriod
 
 
 # Finds the highest quality stream in MPD according to it's bandwidth
@@ -356,6 +474,12 @@ def parseMPD(mpd_url, stream_name, streaminfo, mpd_available, streamDir):
 def startStream(mpd_url, streaminfo, mpd_available):
     # First, check if the stream already exists locally
     if streamInMap(mpd_url):
+        # While the client is wachting the cached stream, the server will start transcoding the again to the clients preferred quality
+        # We start a new thread
+        thread = threading.Thread(target=GetSegmentsExistingStream, args=(mpd_url, streaminfo, 4))
+        print("Starting thread")
+        thread.start()
+        # We return the existing stream, so that the client instantly can start watching the cached stream
         returnExistingStream(mpd_url, streaminfo, mpd_available)
 
     else: 

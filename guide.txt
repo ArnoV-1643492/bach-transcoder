@@ -3,3 +3,6 @@ nginx runs in usr/share/nginx/html
 python js client runs with python -m http.server
 
 comm_server.py runs
+
+docker start baprDB
+docker start baprDBmyadmin

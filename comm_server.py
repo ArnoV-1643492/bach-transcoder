@@ -34,6 +34,8 @@ def getMedia():
 
         # Start thread
         streaminfo = Stream_Info()
+        streaminfo.width = WANTED_WIDTH
+        streaminfo.height = WANTED_HEIGHT
         mpd_available = threading.Event()
         thread = threading.Thread(target=startStream, args=(MPD_URL, streaminfo, mpd_available))
         print("Starting thread")

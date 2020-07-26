@@ -14,6 +14,15 @@
             <video id="video" controls autoplay></video>
         </div>
         <div>
+          <p>Width</p>
+          <input type="number" id="WIDTH"></input>
+        </div>
+        <div>
+          <p>Height</p>
+          <input type="number" id="HEIGTH"></input>
+        </div>
+        <div>
+          <p>MPD URL</p>
           <input type="text" id="MPDURL"></input>
         </div>
         <button onclick="startVideo()">Play</button>
@@ -54,13 +63,15 @@ function initPlayer() {
 function startVideo() {
   var http = new XMLHttpRequest();
   var MPDURL = document.getElementById("MPDURL").value;
+  var WIDTH = document.getElementById("WIDTH").value;
+  var HEIGTH = document.getElementById("HEIGTH").value;
   var url = "http://localhost:5000/media/";
   var params = JSON.stringify(
     {
       //MPD_URL: "https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd",
       MPD_URL: MPDURL,
-      WANTED_WIDTH: 480,
-      WANTED_HEIGHT: 360
+      WANTED_WIDTH: WIDTH,
+      WANTED_HEIGHT: HEIGTH
     }
   );
   http.open("POST", url, true);
