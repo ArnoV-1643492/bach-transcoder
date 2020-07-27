@@ -6,6 +6,7 @@ from flask_cors import CORS
 import json
 import threading
 from transcoder import startStream, Stream_Info
+import DB_conn
 
 # Define error class
 class ServerExcpetion(Exception):
@@ -49,6 +50,34 @@ def getMedia():
         # response = make_response(streaminfo.mpd_url)
         # response.headers['Content-Type'] = 'text/xml'
         return response
+    except Exception as err:
+        print(err)
+        abort(500)
+
+# Requests response time of server
+# Use database method
+@app.route('/stats/responseTime', methods=['GET'])
+def getResponseTime():
+    try:
+        responseTime = DB_conn.getFirstPeriodTime()
+        response = make_response(json.dumps({"responseTime": responseTime}))
+        response.headers['Content-type'] = 'application/json'
+        return response
+        
+    except Exception as err:
+        print(err)
+        abort(500)
+
+# Request stream progress
+# Use database method
+@app.route('/stats/streamData', methods=['GET'])
+def getStreamData():
+    try:
+        streamData = DB_conn.getStreamsProgressData()
+        response = make_response(json.dumps(streamData))
+        response.headers['Content-type'] = 'application/json'
+        return response
+        
     except Exception as err:
         print(err)
         abort(500)
