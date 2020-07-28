@@ -6,3 +6,5 @@ comm_server.py runs
 
 docker start baprDB
 docker start baprDBmyadmin
+
+python -m http.server

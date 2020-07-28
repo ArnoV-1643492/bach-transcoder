@@ -113,7 +113,9 @@ def getFirstPeriodTime():
         average = 0
         for e in diff_list:
             average = average + e
-        average = average / len(diff_list)
+
+        if (len(diff_list) != 0):
+            average = average / len(diff_list)
 
         conn.commit()
         cursor.close()
@@ -190,5 +192,5 @@ now = datetime.now()
 formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
 # addTranscoding("192.168.1.115/dash/bbb_30fps.mpd", "640x360", 200, 0, formatted_date)
 # updateFirstPeriodTime("192.168.1.115/dash/bbb_30fps.mpd", "640x360", formatted_date)
-getFirstPeriodTime()
+print(getFirstPeriodTime())
 print(getStreamsProgressData())

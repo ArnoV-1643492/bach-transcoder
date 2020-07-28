@@ -8,6 +8,8 @@ import os
 import subprocess
 import threading
 import json
+import DB_conn
+from datetime import datetime
 # from h26x_extractor import h26x_parser
 
 # get current directory
@@ -102,6 +104,21 @@ def streamInMap(mpd_url):
     except IOError:
         # Map does not yet exist, there are no streams locally
         return False
+
+
+# Returns the number of segments in stream
+def getNumberOfSegments(mpd_url):
+    try:
+        with open(rootDir + streamMapName) as map:
+            mapData = json.load(map)
+            for stream in mapData["streamList"]:
+                # Stream found
+                if stream["mpd_url"] == mpd_url:
+                    return stream["numberOfSegments"]
+            return 0
+    except IOError:
+        # Map does not yet exist, there are no streams locally
+        return 0
 
 
 # If a stream already exists, the return for the parent thread will be created
@@ -264,7 +281,11 @@ def GetSegments(baseURL, fileNameTemplate, baseWriteLocation, numberOfSegments, 
 
 # HTTP GETs all the segments and saves them on disc
 def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate, representationID, initSegmentTemplate, segmentsPerPeriod, MPDuration, stream_name, streaminfo, mpd_available, streamDir, mpd_url):
-    
+    # Add representation to database
+    now = datetime.now()
+    formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
+    representationName = streaminfo.height + "x" + streaminfo.width
+    DB_conn.addTranscoding(mpd_url, representationName, numberOfSegments, 0, formatted_date)
     # First download init segment
     initSegmentName = initSegmentTemplate.replace("$RepresentationID$", representationID)
     getURL_init =  baseURL + initSegmentName
@@ -340,6 +361,9 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
         # TODO: decide segmentsize and fragment size
         makePeriod(fileName_period_converted, fileName_period_MPD, 4000, 2000)
 
+        # Update segmentcount in database
+        DB_conn.updateTranscodedSegments(mpd_url, representationName, j)
+
         # Update final MPD
         # If this is the first period, copy the created MPD
         if (i == 1):
@@ -347,6 +371,11 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
             # Notify parent thread that first period is finished
             streaminfo.mpd_url = MPDName
             mpd_available.set()
+            # Update time of availibility in database
+            now = datetime.now()
+            formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
+            DB_conn.updateFirstPeriodTime(mpd_url, representationName, formatted_date)
+            
         # Otherwise, add the created period to the existing MPD
         else:
             addPeriodToMPD(MPDName, fileName_period_MPD, periodNumber)
@@ -357,6 +386,12 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
 # This method will use already cached video segments to transcode them to a new resolution
 def GetSegmentsExistingStream(mpd_url, streaminfo, segmentsPerPeriod):
     addRepresentationToStreamMap(mpd_url, streaminfo.width, streaminfo.height)
+    # Add representation to database
+    now = datetime.now()
+    formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
+    representationName = streaminfo.height + "x" + streaminfo.width
+    numberOfSegments = getNumberOfSegments(mpd_url)
+    DB_conn.addTranscoding(mpd_url, representationName, numberOfSegments, 0, formatted_date)
 
     numberOfSegments = 0
     periodBaseName = ""
@@ -409,6 +444,9 @@ def GetSegmentsExistingStream(mpd_url, streaminfo, segmentsPerPeriod):
 
         # Add representation to the existing MPD
         addRepresentationToMPD(MPDName, fileName_period_MPD, periodNumber)
+
+        # Update segmentcount in database
+        DB_conn.updateTranscodedSegments(mpd_url, representationName, i)
 
         periodNumber = periodNumber + 1
         i = i + segmentsPerPeriod
