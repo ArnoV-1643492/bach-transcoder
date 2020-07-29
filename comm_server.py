@@ -44,7 +44,7 @@ def getMedia():
 
         # Add client to database and return id
         ip = request.remote_addr
-        client_id = DB_conn.postClientStatus(MPD_URL, 0, ip, True)
+        client_id = DB_conn.postClientStatus(MPD_URL, 0, ip, True, WANTED_WIDTH, WANTED_HEIGHT)
 
         # wait here for the result to be available before continuing
         mpd_available.wait()

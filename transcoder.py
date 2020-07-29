@@ -33,7 +33,7 @@ segmentsInPeriod = 4
 lock = threading.Lock()
 
 # Server load limit
-maxLoad = 0
+maxLoad = 1
 currentLoad = 0
 
 # mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
@@ -65,7 +65,7 @@ def decreaseLoadCounter():
 # periodBase name is the first part of the name of the concatenated periods
 # periodNameEnd is the part of the name that comes after the index of the period
 # THREAD LOCK
-def addStreamMap(streamDir, mpd_url, periodBaseName, periodNameEnd, MPDName, stream_name, representationWidth, representationHeight, numberOfSegments):
+def addStreamMap(streamDir, mpd_url, periodBaseName, periodNameEnd, MPDName, stream_name, representationWidth, representationHeight, numberOfSegments, durationS):
     with lock:
         mapData = {}
         mapData["streamList"] = []
@@ -84,6 +84,7 @@ def addStreamMap(streamDir, mpd_url, periodBaseName, periodNameEnd, MPDName, str
         stream["MPDName"] = MPDName
         stream["stream_name"] = stream_name
         stream["numberOfSegments"] = numberOfSegments
+        stream["durationS"] = durationS
 
         # Add the current representation to the stream as well
         representation = {}
@@ -149,6 +150,23 @@ def getNumberOfSegments(mpd_url):
                     # Stream found
                     if stream["mpd_url"] == mpd_url:
                         return stream["numberOfSegments"]
+                return 0
+        except IOError:
+            # Map does not yet exist, there are no streams locally
+            return 0
+
+
+# Returns the duration in seconds of a stream
+# THREAD LOCK
+def getDurationS(mpd_url):
+    with lock:
+        try:
+            with open(rootDir + streamMapName) as map:
+                mapData = json.load(map)
+                for stream in mapData["streamList"]:
+                    # Stream found
+                    if stream["mpd_url"] == mpd_url:
+                        return stream["durationS"]
                 return 0
         except IOError:
             # Map does not yet exist, there are no streams locally
@@ -361,12 +379,12 @@ def GetSegments(baseURL, fileNameTemplate, baseWriteLocation, numberOfSegments, 
 
 
 # HTTP GETs all the segments and saves them on disc
-def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate, representationID, initSegmentTemplate, segmentsPerPeriod, MPDuration, stream_name, streaminfo, mpd_available, streamDir, mpd_url):
+def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate, representationID, initSegmentTemplate, segmentsPerPeriod, MPDuration, stream_name, streaminfo, mpd_available, streamDir, mpd_url, durationS):
     # Add representation to database
     now = datetime.now()
     formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
-    representationName = streaminfo.height + "x" + streaminfo.width
-    DB_conn.addTranscoding(mpd_url, representationName, numberOfSegments, 0, formatted_date)
+    representationName = streaminfo.width + "x" + streaminfo.height
+    DB_conn.addTranscoding(mpd_url, representationName, numberOfSegments, 0, formatted_date, durationS)
     # First download init segment
     initSegmentName = initSegmentTemplate.replace("$RepresentationID$", representationID)
     getURL_init =  baseURL + initSegmentName
@@ -399,7 +417,7 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
     origVideoExtention = initSplit[len(initSplit) -1]
 
     # Add stream to map
-    addStreamMap(streamDir, mpd_url, representationID + "_period_", origVideoExtention, MPDName, stream_name, streaminfo.width, streaminfo.height, numberOfSegments)
+    addStreamMap(streamDir, mpd_url, representationID + "_period_", origVideoExtention, MPDName, stream_name, streaminfo.width, streaminfo.height, numberOfSegments, durationS)
 
     i = 1
 
@@ -483,9 +501,10 @@ def GetSegmentsExistingStream(mpd_url, streaminfo, segmentsPerPeriod):
         # Add representation to database
         now = datetime.now()
         formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
-        representationName = streaminfo.height + "x" + streaminfo.width
+        representationName = streaminfo.width + "x" + streaminfo.height
         numberOfSegments = getNumberOfSegments(mpd_url)
-        DB_conn.addTranscoding(mpd_url, representationName, numberOfSegments, 0, formatted_date)
+        durationS = getDurationS(mpd_url)
+        DB_conn.addTranscoding(mpd_url, representationName, numberOfSegments, 0, formatted_date, durationS)
 
         numberOfSegments = 0
         periodBaseName = ""
@@ -619,7 +638,7 @@ def parseMPD(mpd_url, stream_name, streaminfo, mpd_available, streamDir):
     nSegments = math.ceil(nSegments)
     print(nSegments)
 
-    GetSegmentsV2(base_url_final, representationID+"/", nSegments, mpd_segment_template_string, representationID, initSegmentTemplate, 4, mpd.media_presentation_duration, stream_name, streaminfo, mpd_available, streamDir, mpd_url)
+    GetSegmentsV2(base_url_final, representationID+"/", nSegments, mpd_segment_template_string, representationID, initSegmentTemplate, 4, mpd.media_presentation_duration, stream_name, streaminfo, mpd_available, streamDir, mpd_url, durationS)
 
 
 # This is the start of the thread that downloads videos and transcodes them

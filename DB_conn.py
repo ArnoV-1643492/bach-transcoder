@@ -11,7 +11,7 @@ import json
 # mpd_url and representation: string
 # numberOfSegments and segmentTranscoded: int
 # requestTime: date
-def addTranscoding(mpd_url, representation, numberOfSegments, segmentsTranscoded, requestTime):
+def addTranscoding(mpd_url, representation, numberOfSegments, segmentsTranscoded, requestTime, durationS):
     # connect to database
     try:
         conn = mysql.connector.connect(user=user, password=password, host=host, port=port, database=database)
@@ -19,10 +19,10 @@ def addTranscoding(mpd_url, representation, numberOfSegments, segmentsTranscoded
 
         # create insert
         add = ("INSERT INTO transcoding "
-                "(mpd_url, representation, numberOfSegments, segmentsTranscoded, requestTime) "
-                "VALUES (%s, %s, %s, %s, %s)")
+                "(mpd_url, representation, numberOfSegments, segmentsTranscoded, requestTime, durationS) "
+                "VALUES (%s, %s, %s, %s, %s, %s)")
 
-        data = (mpd_url, representation, numberOfSegments, segmentsTranscoded, requestTime)
+        data = (mpd_url, representation, numberOfSegments, segmentsTranscoded, requestTime, durationS)
 
         cursor.execute(add, data)
 
@@ -140,13 +140,13 @@ def getStreamsProgressData():
         cursor = conn.cursor()
 
         # create insert
-        query = ("SELECT mpd_url, representation, numberOfSegments, segmentsTranscoded FROM transcoding ")
+        query = ("SELECT mpd_url, representation, numberOfSegments, segmentsTranscoded, durationS FROM transcoding ")
 
         cursor.execute(query)
 
         # Put results in JSON
         result = []
-        for (mpd_url, representation, numberOfSegments, segmentsTranscoded) in cursor:
+        for (mpd_url, representation, numberOfSegments, segmentsTranscoded, durationS) in cursor:
             # make representation
             percentage = int((segmentsTranscoded / numberOfSegments) * 100)
             rep = {
@@ -167,9 +167,41 @@ def getStreamsProgressData():
                 stream = {
                     "representations": [rep],
                     "mpd_url": mpd_url,
-                    "numberOfSegments": numberOfSegments
+                    "numberOfSegments": numberOfSegments,
+                    "durationS": durationS,
+                    "clients": []
                 }
                 result.append(stream)
+
+        conn.commit()
+        cursor.close()
+        cursor = conn.cursor()
+
+        # Now add client status data
+        # create query
+        query = ("SELECT id, mpd_url, currentTime, ip, width, height FROM clientStatus "
+        "WHERE running = 1")
+
+        cursor.execute(query)
+
+        for (id, mpd_url, currentTime, ip, width, height) in cursor:
+            # Search for correct mpd
+            for el in result:
+                if el["mpd_url"] == mpd_url:
+                    percentage = 0
+                    if el["durationS"] != 0:
+                        percentage = int((currentTime / el["durationS"])*100)
+                    # Make client
+                    client = {
+                        "id": id,
+                        "ip": ip,
+                        "percentage": percentage,
+                        "width": width,
+                        "height": height
+                    }
+                    el["clients"].append(client)
+                    break
+
 
         resultJSON = {"streamData": result}
 
@@ -190,7 +222,7 @@ def getStreamsProgressData():
 
 
 # Used by client to update its status (current watch time)
-def postClientStatus(mpd_url, currentTime, ip, running):
+def postClientStatus(mpd_url, currentTime, ip, running, width, height):
     # connect to database
     try:
         conn = mysql.connector.connect(user=user, password=password, host=host, port=port, database=database)
@@ -198,10 +230,10 @@ def postClientStatus(mpd_url, currentTime, ip, running):
 
         # create insert
         add = ("INSERT INTO clientStatus "
-                "(mpd_url, currentTime, ip, running) "
-                "VALUES (%s, %s, %s, %s)")
+                "(mpd_url, currentTime, ip, running, width, height) "
+                "VALUES (%s, %s, %s, %s, %s, %s)")
 
-        data = (mpd_url, currentTime, ip, running)
+        data = (mpd_url, currentTime, ip, running, width, height)
 
         cursor.execute(add, data)
 
