@@ -188,9 +188,106 @@ def getStreamsProgressData():
         else:
             print(err)
 
+
+# Used by client to update its status (current watch time)
+def postClientStatus(mpd_url, currentTime, ip, running):
+    # connect to database
+    try:
+        conn = mysql.connector.connect(user=user, password=password, host=host, port=port, database=database)
+        cursor = conn.cursor()
+
+        # create insert
+        add = ("INSERT INTO clientStatus "
+                "(mpd_url, currentTime, ip, running) "
+                "VALUES (%s, %s, %s, %s)")
+
+        data = (mpd_url, currentTime, ip, running)
+
+        cursor.execute(add, data)
+
+        conn.commit()
+
+        id = cursor.lastrowid
+
+        cursor.close()
+        conn.close()
+
+        return id
+
+    except mysql.connector.Error as err:
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            print("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            print("Database does not exist")
+        else:
+            print(err)
+
+
+# Update the current time of the client
+def updateClientCurrTime(id, currentTime):
+    # connect to database
+    try:
+        conn = mysql.connector.connect(user=user, password=password, host=host, port=port, database=database)
+        cursor = conn.cursor()
+        
+        # create insert
+        add = ("UPDATE clientStatus "
+                "SET currentTime = %s "
+                "WHERE id = %s ")
+
+        data = (currentTime, id)
+
+        cursor.execute(add, data)
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+    except mysql.connector.Error as err:
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            print("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            print("Database does not exist")
+        else:
+            print(err)
+
+
+# Makes running False in clientStatus database
+def stopClientStream(id):
+    # connect to database
+    try:
+        conn = mysql.connector.connect(user=user, password=password, host=host, port=port, database=database)
+        cursor = conn.cursor()
+        
+        # create insert
+        add = ("UPDATE clientStatus "
+                "SET running = %s "
+                "WHERE id = %s ")
+
+        data = (False, id)
+
+        cursor.execute(add, data)
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+    except mysql.connector.Error as err:
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            print("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            print("Database does not exist")
+        else:
+            print(err)
+
+
 now = datetime.now()
 formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
 # addTranscoding("192.168.1.115/dash/bbb_30fps.mpd", "640x360", 200, 0, formatted_date)
 # updateFirstPeriodTime("192.168.1.115/dash/bbb_30fps.mpd", "640x360", formatted_date)
 print(getFirstPeriodTime())
 print(getStreamsProgressData())
+
+# id= postClientStatus("stream.com/bbb.mpd", 0, "192.168.1.1")
+#print(id)
+# updateClientCurrTime(id, 2)

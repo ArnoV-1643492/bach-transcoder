@@ -26,12 +26,16 @@
           <input type="text" id="MPDURL"></input>
         </div>
         <button onclick="startVideo()">Play</button>
+        <button onclick="stopStream()">Stop</button>
         <!-- Shaka Player debug library: -->
         <script src="https://ajax.googleapis.com/ajax/libs/shaka-player/2.5.10/shaka-player.compiled.debug.js"></script>
         <!-- <script src="https://ajax.googleapis.com/ajax/libs/shaka-player/2.5.10/shaka-player.compiled.js"></script> -->
         <script>
 
 var manifestUri = 'http://localhost:8000/bbb_30fps_3840x2160_12000k_local_.mpd';
+var client_id;
+var player;
+var running = true;
 
 function initApp() {
   // Install built-in polyfills to patch browser incompatibilities.
@@ -50,7 +54,7 @@ function initApp() {
 function initPlayer() {
   // Create a Player instance.
   var video = document.getElementById('video');
-  var player = new shaka.Player(video);
+  player = new shaka.Player(video);
 
   // Attach player to the window to make it easy to access in the JS console.
   window.player = player;
@@ -88,15 +92,70 @@ function startVideo() {
       responseMPDURL = "http://localhost/" + jsonResponse.STREAM_INFO.LOCAL_MPD_URL;
     }
 
+    client_id = jsonResponse.CLIENT_ID
+
     // Try to load manifest.
     // This is an asynchronous process.
     player.load(responseMPDURL).then(function() {
       // This runs if the asynchronous load is successful.
       console.log('The video has now been loaded!');
     }).catch(onError);  // onError is executed if the asynchronous load fails.
+
+    // Start sending stream status
+    passCurrentTime(client_id);
   };
   http.send(params);
 
+}
+
+function passCurrentTime(client_id) {
+  var http = new XMLHttpRequest();
+  // Communicates the current time to the server
+  var video = document.getElementById('video');
+  var currTime = video.currentTime;
+
+  var url = "http://localhost:5000/client/currTime";
+  var params = JSON.stringify(
+    {
+      CLIENT_ID: client_id,
+      CURR_TIME: currTime
+    }
+  );
+  http.open("POST", url, true);
+
+  http.setRequestHeader("Content-type", "application/json; charset=utf-8");
+  http.onload  = function() {
+    // Repeat after 1 second sleep
+    if (running){
+      setTimeout(() => {passCurrentTime(client_id);}, 1000);
+    }
+  };
+  http.send(params);
+}
+
+function stopStream() {
+  running = false;
+  player.unload();
+  player.detach();
+  //player.destroy();
+  var http = new XMLHttpRequest();
+  // Communicates the current time to the server
+  var video = document.getElementById('video');
+  var currTime = video.currentTime;
+
+  var url = "http://localhost:5000/client/stopStream";
+  var params = JSON.stringify(
+    {
+      CLIENT_ID: client_id
+    }
+  );
+  http.open("POST", url, true);
+
+  http.setRequestHeader("Content-type", "application/json; charset=utf-8");
+  http.onload  = function() {
+    console.log("Stopping stream");
+  };
+  http.send(params);
 }
 
 function onErrorEvent(event) {

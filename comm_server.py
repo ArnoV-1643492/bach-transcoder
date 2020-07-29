@@ -42,10 +42,14 @@ def getMedia():
         print("Starting thread")
         thread.start()
 
+        # Add client to database and return id
+        ip = request.remote_addr
+        client_id = DB_conn.postClientStatus(MPD_URL, 0, ip, True)
+
         # wait here for the result to be available before continuing
         mpd_available.wait()
 
-        response = make_response(json.dumps({"STREAM_AVAILABLE": True, "STREAM_INFO": {"LOCAL_MPD_URL": streaminfo.stream_name + "/" + streaminfo.mpd_url}}))
+        response = make_response(json.dumps({"STREAM_AVAILABLE": True, "CLIENT_ID": client_id, "STREAM_INFO": {"LOCAL_MPD_URL": streaminfo.stream_name + "/" + streaminfo.mpd_url}}))
         response.headers['Content-Type'] = 'application/json'
         # response = make_response(streaminfo.mpd_url)
         # response.headers['Content-Type'] = 'text/xml'
@@ -78,6 +82,41 @@ def getStreamData():
         response.headers['Content-type'] = 'application/json'
         return response
         
+    except Exception as err:
+        print(err)
+        abort(500)
+
+# Receives updates from clients about their current player time
+# Post in database
+@app.route('/client/currTime', methods=['POST'])
+def postCurrTime():
+    try:
+        # Get values
+        data = request.get_json(force=True)
+        CLIENT_ID = data["CLIENT_ID"]
+        CURR_TIME = data["CURR_TIME"]
+        print(CLIENT_ID, CURR_TIME)
+        print(type(CURR_TIME))
+        DB_conn.updateClientCurrTime(CLIENT_ID, CURR_TIME)
+
+        return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
+    
+    except Exception as err:
+        print(err)
+        abort(500)
+
+# Stops this client's stream
+@app.route('/client/stopStream', methods=['POST'])
+def stopStream():
+    try:
+        # Get values
+        data = request.get_json(force=True)
+        CLIENT_ID = data["CLIENT_ID"]
+        print("Stop stream")
+        DB_conn.stopClientStream(CLIENT_ID)
+
+        return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
+    
     except Exception as err:
         print(err)
         abort(500)
