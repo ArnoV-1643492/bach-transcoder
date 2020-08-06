@@ -33,7 +33,7 @@ segmentsInPeriod = 4
 lock = threading.Lock()
 
 # Server load limit
-maxLoad = 1
+maxLoad = 2
 currentLoad = 0
 
 # mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
@@ -454,6 +454,12 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
             urllib.request.urlretrieve(getURL, fileName)
             catSegment(fileName, periodName)
 
+        # Add downloadtime to database for first period
+        if (i == 1):
+            now = datetime.now()
+            downloadTime_formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
+            DB_conn.updateDownloadTime(mpd_url, representationName, downloadTime_formatted_date)
+
         # Convert period to new resolution
         height = streaminfo.height
         width = streaminfo.width
@@ -476,7 +482,7 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
             # Notify parent thread that first period is finished
             streaminfo.mpd_url = MPDName
             mpd_available.set()
-            # Update time of availibility in database
+            # Update time of availibility and download time in database
             now = datetime.now()
             formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
             DB_conn.updateFirstPeriodTime(mpd_url, representationName, formatted_date)

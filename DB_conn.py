@@ -92,6 +92,35 @@ def updateFirstPeriodTime(mpd_url, representation, firstPeriodTime):
         else:
             print(err)
 
+
+def updateDownloadTime(mpd_url, representation, downloadTime):
+    # connect to database
+    try:
+        conn = mysql.connector.connect(user=user, password=password, host=host, port=port, database=database)
+        cursor = conn.cursor()
+
+        # create insert
+        add = ("UPDATE transcoding "
+                "SET downloadTime = %s "
+                "WHERE (mpd_url = %s AND representation = %s) ")
+
+        data = (downloadTime, mpd_url, representation)
+
+        cursor.execute(add, data)
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+    except mysql.connector.Error as err:
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            print("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            print("Database does not exist")
+        else:
+            print(err)
+
+
 # Gets total response time in seconds
 def getFirstPeriodTime():
     # connect to database
@@ -140,19 +169,31 @@ def getStreamsProgressData():
         cursor = conn.cursor()
 
         # create insert
-        query = ("SELECT mpd_url, representation, numberOfSegments, segmentsTranscoded, durationS FROM transcoding ")
+        query = ("SELECT mpd_url, representation, numberOfSegments, segmentsTranscoded, requestTime, firstPeriodTime, downloadTime, durationS FROM transcoding ")
 
         cursor.execute(query)
 
         # Put results in JSON
         result = []
-        for (mpd_url, representation, numberOfSegments, segmentsTranscoded, durationS) in cursor:
+        for (mpd_url, representation, numberOfSegments, segmentsTranscoded, requestTime, firstPeriodTime, downloadTime, durationS) in cursor:
             # make representation
             percentage = int((segmentsTranscoded / numberOfSegments) * 100)
             rep = {
                 "name": representation,
                 "percentage": percentage
             }
+
+            # Add time it took to download segments
+            if downloadTime is not None:
+                rep["downloadTime"] = (downloadTime - requestTime).total_seconds()
+
+            # Add time it took to transcode segments
+            if downloadTime is not None and firstPeriodTime is not None:
+                rep["transcodeTime"] = (firstPeriodTime - downloadTime).total_seconds()
+
+            # Add total time it took to process first period
+            if firstPeriodTime is not None:
+                rep["firstPeriodTime"] = (firstPeriodTime - requestTime).total_seconds()
 
             # check if mpd already in result
             inResult = False
@@ -323,3 +364,4 @@ print(getStreamsProgressData())
 # id= postClientStatus("stream.com/bbb.mpd", 0, "192.168.1.1")
 #print(id)
 # updateClientCurrTime(id, 2)
+#updateDownloadTime("http://192.168.1.115/dash/bbb_30fps.mpd", "1920x1080", formatted_date)
