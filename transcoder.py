@@ -36,6 +36,11 @@ lock = threading.Lock()
 maxLoad = 2
 currentLoad = 0
 
+# CSV log
+CSV_file = "testlog.csv"
+with open(CSV_file, 'w+') as CSV:
+    CSV.write("representation;downloadTime;transcodeTime;firstPeriodTime" + os.linesep)
+
 # mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
 # mpd_url = 'https://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd'
 
@@ -382,9 +387,10 @@ def GetSegments(baseURL, fileNameTemplate, baseWriteLocation, numberOfSegments, 
 def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate, representationID, initSegmentTemplate, segmentsPerPeriod, MPDuration, stream_name, streaminfo, mpd_available, streamDir, mpd_url, durationS):
     # Add representation to database
     now = datetime.now()
-    formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
+    requestTime_formatted = now
     representationName = streaminfo.width + "x" + streaminfo.height
-    DB_conn.addTranscoding(mpd_url, representationName, numberOfSegments, 0, formatted_date, durationS)
+    #DB_conn.addTranscoding(mpd_url, representationName, numberOfSegments, 0, formatted_date, durationS)
+
     # First download init segment
     initSegmentName = initSegmentTemplate.replace("$RepresentationID$", representationID)
     getURL_init =  baseURL + initSegmentName
@@ -428,7 +434,7 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
     segmentsPerPeriod = segmentsFirstPeriod
 
     # Init segment is 0, so start at 1 for data segments
-    while(i < numberOfSegments):
+    while(i <= 1):
 
         periodName = representationID + "_period_" + str(periodNumber) + "." + origVideoExtention
         # At the beginning of each period file we will place the init data
@@ -455,10 +461,9 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
             catSegment(fileName, periodName)
 
         # Add downloadtime to database for first period
-        if (i == 1):
-            now = datetime.now()
-            downloadTime_formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
-            DB_conn.updateDownloadTime(mpd_url, representationName, downloadTime_formatted_date)
+        now = datetime.now()
+        downloadTime_formatted_date = now
+        # DB_conn.updateDownloadTime(mpd_url, representationName, downloadTime_formatted_date)
 
         # Convert period to new resolution
         height = streaminfo.height
@@ -473,29 +478,34 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
         makePeriod(fileName_period_converted, fileName_period_MPD, 4000, 2000)
 
         # Update segmentcount in database
-        DB_conn.updateTranscodedSegments(mpd_url, representationName, j)
+        # DB_conn.updateTranscodedSegments(mpd_url, representationName, j)
 
         # Update final MPD
         # If this is the first period, copy the created MPD
-        if (i == 1):
-            copyMPD(MPDName, fileName_period_MPD, MPDuration, periodNumber)
-            # Notify parent thread that first period is finished
-            streaminfo.mpd_url = MPDName
-            mpd_available.set()
-            # Update time of availibility and download time in database
-            now = datetime.now()
-            formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
-            DB_conn.updateFirstPeriodTime(mpd_url, representationName, formatted_date)
+        copyMPD(MPDName, fileName_period_MPD, MPDuration, periodNumber)
+        # Update time of availibility and download time in database
+        now = datetime.now()
+        firstPeriod_formatted_date = now
+        # DB_conn.updateFirstPeriodTime(mpd_url, representationName, formatted_date)
 
-            # Switch the segments per period to a larger number
-            segmentsPerPeriod = segmentsInPeriod
-            
-        # Otherwise, add the created period to the existing MPD
-        else:
-            addPeriodToMPD(MPDName, fileName_period_MPD, periodNumber)
+        # Add time to CSV
+        with open("../"+CSV_file, 'a') as CSV:
+            print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+            downloadTime = (downloadTime_formatted_date - requestTime_formatted).total_seconds()
+            transcodeTime = (firstPeriod_formatted_date - downloadTime_formatted_date).total_seconds()
+            firstPeriodTime = (firstPeriod_formatted_date - requestTime_formatted).total_seconds()
+            print(str(representationName) + ';' + str(downloadTime) + ';' + str(transcodeTime) + ';' + str(firstPeriodTime) + os.linesep)
+            CSV.write(str(representationName) + ';' + str(downloadTime) + ';' + str(transcodeTime) + ';' + str(firstPeriodTime) + os.linesep)
+
+        # Switch the segments per period to a larger number
+        segmentsPerPeriod = segmentsInPeriod
         
         periodNumber = periodNumber + 1
         i = j + 1
+
+        # Notify parent thread that first period is finished
+        streaminfo.mpd_url = MPDName
+        mpd_available.set()
 
     # Transcoding complete, decrease load counter
     decreaseLoadCounter()
