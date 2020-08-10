@@ -13,6 +13,10 @@ services:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: default_schema
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
@@ -28,3 +32,14 @@ services:
       - "8183:80"
     depends_on:
     - mysql
+
+  transcoder:
+    image: transcoder
+    container_name: tr_compose
+    ports:
+      - 5000:5000
+      - 8081:80
+    links:
+      - mysql:mysql
+    depends_on:
+      - mysql
