@@ -178,9 +178,13 @@ def getStreamsProgressData():
         for (mpd_url, representation, numberOfSegments, segmentsTranscoded, requestTime, firstPeriodTime, downloadTime, durationS) in cursor:
             # make representation
             percentage = int((segmentsTranscoded / numberOfSegments) * 100)
+            timePerSegment = int(durationS / numberOfSegments)
+            transcodedInTime = segmentsTranscoded * timePerSegment
             rep = {
                 "name": representation,
-                "percentage": percentage
+                "percentage": percentage,
+                "transcodedInTime": transcodedInTime,
+                "durationS": durationS
             }
 
             # Add time it took to download segments
@@ -237,6 +241,8 @@ def getStreamsProgressData():
                         "id": id,
                         "ip": ip,
                         "percentage": percentage,
+                        "currentTime": currentTime,
+                        "durationS": durationS,
                         "width": width,
                         "height": height
                     }
