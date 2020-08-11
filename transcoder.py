@@ -490,7 +490,6 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
 
         # Add time to CSV
         with open("../"+CSV_file, 'a') as CSV:
-            print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
             downloadTime = (downloadTime_formatted_date - requestTime_formatted).total_seconds()
             transcodeTime = (firstPeriod_formatted_date - downloadTime_formatted_date).total_seconds()
             firstPeriodTime = (firstPeriod_formatted_date - requestTime_formatted).total_seconds()
@@ -502,6 +501,10 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
         
         periodNumber = periodNumber + 1
         i = j + 1
+
+        # Remove all cached files and the streamMap
+        subprocess.run(["rm", "-r", rootDir + "bbb_30fps/"])
+        subprocess.run(["rm", rootDir + streamMapName])
 
         # Notify parent thread that first period is finished
         streaminfo.mpd_url = MPDName
