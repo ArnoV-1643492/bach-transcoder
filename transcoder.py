@@ -229,15 +229,14 @@ def isCachedEqual(mpd_url, streaminfo):
 # Scale the segment to a different resolution
 def scaleSegment(inputSeg, outputSeg, output_width, output_height):
     input_args = {
-        "hwaccel": "nvdec",
-        "vcodec": "h264_cuvid",
-        "c:v": "h264_cuvid",
-        "analyzeduration": "2147483647",
-        "probesize": "2147483647"
+        "vcodec": "h264_cuvid"
+    }
+    output_args = {
+        "force_key_frames": "expr:eq(n,0)"
     }
     stream = ffmpeg.input(inputSeg, **input_args)
     stream = ffmpeg.filter(stream, 'scale', width=output_width, height=output_height)
-    stream = ffmpeg.output(stream, outputSeg)
+    stream = ffmpeg.output(stream, outputSeg, **output_args)
     compileStr = ffmpeg.compile(stream)
     print(compileStr)
     ffmpeg.run(stream)
@@ -264,7 +263,7 @@ def makePeriod(periodName, MPDName, segmentSize, fragmentSize):
     #  "-url-template", wtih segmentSize 1000 for segmentTemplate instead of segmentlist
     # , "-segment-timeline" , "-segment-name", "\"$RepresentationID$_$Number$$Init=i$\"",
     # subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-segment-timeline", "-frag", str(fragmentSize), "-out", MPDName, periodName])
-    subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-frag", str(fragmentSize), "-segment-timeline", "-out", MPDName, periodName, periodName])
+    subprocess.run(["MP4Box", "-dash", str(segmentSize), "-frag", str(fragmentSize), "-segment-timeline", "-out", MPDName, periodName, periodName])
     # subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-frag-rap", "-bs-switching", "inband", "-out", MPDName, periodName, "-url-template"])
 
 
