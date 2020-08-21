@@ -360,6 +360,86 @@ def stopClientStream(id):
             print(err)
 
 
+# Makes sure the correct database and tables are created
+def initDB():
+    # connect to database
+    try:
+        conn = mysql.connector.connect(user=user, password=password, host=host, port=port)
+        cursor = conn.cursor()
+
+        db_add = "CREATE DATABASE IF NOT EXISTS " + database
+        cursor.execute(db_add)
+
+    except mysql.connector.Error as err:
+        print(err)
+
+    # Create transcoding table
+    try:
+        conn = mysql.connector.connect(user=user, password=password, host=host, port=port, database=database)
+        cursor = conn.cursor()
+        
+        # create transcoding table
+        add = ("CREATE TABLE IF NOT EXISTS `transcoding` ("
+        " `mpd_url` varchar(255) NOT NULL,"
+        " `representation` varchar(255) NOT NULL,"
+        " `numberOfSegments` int NOT NULL,"
+        " `segmentsTranscoded` int NOT NULL,"
+        " `requestTime` datetime NOT NULL,"
+        " `firstPeriodTime` datetime DEFAULT NULL,"
+        " `downloadTime` datetime DEFAULT NULL,"
+        " `durationS` float NOT NULL,"
+        " PRIMARY KEY (`mpd_url`,`representation`)"
+        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci")
+
+        cursor.execute(add)
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+    except mysql.connector.Error as err:
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            print("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            print("Database does not exist")
+        else:
+            print(err)
+
+    # Create clientStatus table
+    try:
+        conn = mysql.connector.connect(user=user, password=password, host=host, port=port, database=database)
+        cursor = conn.cursor()
+        
+        # create transcoding table
+        add = ("CREATE TABLE IF NOT EXISTS `clientStatus` ("
+        " `id` int NOT NULL AUTO_INCREMENT,"
+        " `mpd_url` varchar(255) NOT NULL,"
+        " `currentTime` float NOT NULL,"
+        " `ip` text NOT NULL,"
+        " `running` tinyint(1) NOT NULL,"
+        " `width` int NOT NULL,"
+        " `height` int NOT NULL,"
+        " PRIMARY KEY (`id`)"
+        ") ENGINE=InnoDB AUTO_INCREMENT=297 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci"
+        )
+
+        cursor.execute(add)
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+    except mysql.connector.Error as err:
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            print("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            print("Database does not exist")
+        else:
+            print(err)
+
+
+initDB()
+
 now = datetime.now()
 formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
 # addTranscoding("192.168.1.115/dash/bbb_30fps.mpd", "640x360", 200, 0, formatted_date)
