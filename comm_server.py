@@ -16,6 +16,7 @@ class ServerExcpetion(Exception):
 app = Flask(__name__)
 CORS(app)
 
+app.config["APPLICATION_ROOT"] = "/transcoder"
 
 @app.route('/')
 def hello():

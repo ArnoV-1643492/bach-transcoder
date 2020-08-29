@@ -18,7 +18,7 @@ print("------------------------------------------------")
 print(dir_path)
 print("------------------------------------------------")
 # change working directory
-rootDir = "/usr/share/nginx/html/"
+rootDir = "/usr/share/nginx/html/dash/"
 os.chdir(rootDir)
 
 # This is where the information of the currently stored streams is kept
@@ -35,11 +35,6 @@ lock = threading.Lock()
 # Server load limit
 maxLoad = 2
 currentLoad = 0
-
-# CSV log
-CSV_file = "testlog.csv"
-with open(CSV_file, 'w+') as CSV:
-    CSV.write("representation;downloadTime;transcodeTime;firstPeriodTime" + os.linesep)
 
 # mpd_url = 'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd'
 # mpd_url = 'https://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd'
@@ -233,16 +228,12 @@ def isCachedEqual(mpd_url, streaminfo):
 
 # Scale the segment to a different resolution
 def scaleSegment(inputSeg, outputSeg, output_width, output_height):
-    input_args = {
-        "hwaccel": "nvdec",
-        "vcodec": "h264_cuvid",
-        "c:v": "h264_cuvid",
-        "analyzeduration": "2147483647",
-        "probesize": "2147483647"
+    output_args = {
+        "force_key_frames": "expr:eq(n,0)"
     }
-    stream = ffmpeg.input(inputSeg, **input_args)
+    stream = ffmpeg.input(inputSeg)
     stream = ffmpeg.filter(stream, 'scale', width=output_width, height=output_height)
-    stream = ffmpeg.output(stream, outputSeg)
+    stream = ffmpeg.output(stream, outputSeg, **output_args)
     compileStr = ffmpeg.compile(stream)
     print(compileStr)
     ffmpeg.run(stream)
@@ -269,7 +260,8 @@ def makePeriod(periodName, MPDName, segmentSize, fragmentSize):
     #  "-url-template", wtih segmentSize 1000 for segmentTemplate instead of segmentlist
     # , "-segment-timeline" , "-segment-name", "\"$RepresentationID$_$Number$$Init=i$\"",
     # subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-segment-timeline", "-frag", str(fragmentSize), "-out", MPDName, periodName])
-    subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-frag", str(fragmentSize), "-segment-timeline", "-out", MPDName, periodName, periodName])
+    subprocess.run(["MP4Box", "-dash", str(segmentSize), "-frag", str(fragmentSize), "-segment-timeline", "-out", MPDName, periodName, periodName])
+    # subprocess.run(["MP4Box", "-dash", str(segmentSize), "-frag", str(fragmentSize), "-segment-name", periodNameConverted+"_segment", "-out", MPDName, periodName])
     # subprocess.run(["MP4Box", "-dash", str(segmentSize), "-rap", "-frag-rap", "-bs-switching", "inband", "-out", MPDName, periodName, "-url-template"])
 
 
@@ -308,6 +300,7 @@ def addPeriodToMPD(MPDName, periodMPDName, periodNumber):
         # Write new verion of MPD
         MPEGDASHParser.write(MPD_parse, MPDName)
 
+
 # THREAD LOCK
 def addRepresentationToMPD(MPDName, periodMPDName, periodNumber):
     with lock:
@@ -334,7 +327,7 @@ def copyMPD(MPDName, periodMPDName, MPDuration, periodNumber):
     with lock:
         #with open(MPDName, "ab") as MPD, open(periodMPDName, "rb") as period:
         #    MPD.write(period.read())
-        
+
         # Change duration
         MPD_parse = MPEGDASHParser.parse(periodMPDName)
         # Give new id to period
@@ -387,10 +380,9 @@ def GetSegments(baseURL, fileNameTemplate, baseWriteLocation, numberOfSegments, 
 def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate, representationID, initSegmentTemplate, segmentsPerPeriod, MPDuration, stream_name, streaminfo, mpd_available, streamDir, mpd_url, durationS):
     # Add representation to database
     now = datetime.now()
-    requestTime_formatted = now
+    formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
     representationName = streaminfo.width + "x" + streaminfo.height
-    #DB_conn.addTranscoding(mpd_url, representationName, numberOfSegments, 0, formatted_date, durationS)
-
+    DB_conn.addTranscoding(mpd_url, representationName, numberOfSegments, 0, formatted_date, durationS)
     # First download init segment
     initSegmentName = initSegmentTemplate.replace("$RepresentationID$", representationID)
     getURL_init =  baseURL + initSegmentName
@@ -434,7 +426,7 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
     segmentsPerPeriod = segmentsFirstPeriod
 
     # Init segment is 0, so start at 1 for data segments
-    while(i <= 1):
+    while(i < numberOfSegments):
 
         periodName = representationID + "_period_" + str(periodNumber) + "." + origVideoExtention
         # At the beginning of each period file we will place the init data
@@ -461,15 +453,17 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
             catSegment(fileName, periodName)
 
         # Add downloadtime to database for first period
-        now = datetime.now()
-        downloadTime_formatted_date = now
-        # DB_conn.updateDownloadTime(mpd_url, representationName, downloadTime_formatted_date)
+        if (i == 1):
+            now = datetime.now()
+            downloadTime_formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
+            DB_conn.updateDownloadTime(mpd_url, representationName, downloadTime_formatted_date)
 
         # Convert period to new resolution
         height = streaminfo.height
         width = streaminfo.width
         fileName_period_converted = representationID + "_period_" + str(periodNumber) + "_" + str(width) + 'x' + str(height) + '.' + origVideoExtention
         fileName_period_MPD = representationID + "_period_" + str(periodNumber) + "_" + str(width) + 'x' + str(height) + '.mpd'
+        periodNameConverted = representationID + "_period_" + str(periodNumber) + "_" + str(width) + 'x' + str(height)
         # Transcode
         scaleSegment(periodName, fileName_period_converted, width, height)
 
@@ -478,37 +472,29 @@ def GetSegmentsV2(baseURL, baseWriteLocation, numberOfSegments, segmentTemplate,
         makePeriod(fileName_period_converted, fileName_period_MPD, 4000, 2000)
 
         # Update segmentcount in database
-        # DB_conn.updateTranscodedSegments(mpd_url, representationName, j)
+        DB_conn.updateTranscodedSegments(mpd_url, representationName, j)
 
         # Update final MPD
         # If this is the first period, copy the created MPD
-        copyMPD(MPDName, fileName_period_MPD, MPDuration, periodNumber)
-        # Update time of availibility and download time in database
-        now = datetime.now()
-        firstPeriod_formatted_date = now
-        # DB_conn.updateFirstPeriodTime(mpd_url, representationName, formatted_date)
+        if (i == 1):
+            copyMPD(MPDName, fileName_period_MPD, MPDuration, periodNumber)
+            # Notify parent thread that first period is finished
+            streaminfo.mpd_url = MPDName
+            mpd_available.set()
+            # Update time of availibility and download time in database
+            now = datetime.now()
+            formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
+            DB_conn.updateFirstPeriodTime(mpd_url, representationName, formatted_date)
 
-        # Add time to CSV
-        with open("../"+CSV_file, 'a') as CSV:
-            downloadTime = (downloadTime_formatted_date - requestTime_formatted).total_seconds()
-            transcodeTime = (firstPeriod_formatted_date - downloadTime_formatted_date).total_seconds()
-            firstPeriodTime = (firstPeriod_formatted_date - requestTime_formatted).total_seconds()
-            print(str(representationName) + ';' + str(downloadTime) + ';' + str(transcodeTime) + ';' + str(firstPeriodTime) + os.linesep)
-            CSV.write(str(representationName) + ';' + str(downloadTime) + ';' + str(transcodeTime) + ';' + str(firstPeriodTime) + os.linesep)
-
-        # Switch the segments per period to a larger number
-        segmentsPerPeriod = segmentsInPeriod
+            # Switch the segments per period to a larger number
+            segmentsPerPeriod = segmentsInPeriod
+            
+        # Otherwise, add the created period to the existing MPD
+        else:
+            addPeriodToMPD(MPDName, fileName_period_MPD, periodNumber)
         
         periodNumber = periodNumber + 1
         i = j + 1
-
-        # Remove all cached files and the streamMap
-        subprocess.run(["rm", "-r", rootDir + "bbb_30fps/"])
-        subprocess.run(["rm", rootDir + streamMapName])
-
-        # Notify parent thread that first period is finished
-        streaminfo.mpd_url = MPDName
-        mpd_available.set()
 
     # Transcoding complete, decrease load counter
     decreaseLoadCounter()
@@ -731,12 +717,9 @@ def main():
     mpd_available = threading.Event()
     thread = threading.Thread(target=startStream, args=(mpd_url, streaminfo, mpd_available))
     thread.start()
-
     # wait here for the result to be available before continuing
     mpd_available.wait()
-
     print('The result is', streaminfo.mpd_url)
-
 if __name__ == '__main__':
     main()
 '''

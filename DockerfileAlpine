@@ -1,0 +1,28 @@
+FROM alpine:3.11
+
+RUN apk update
+RUN apk add ffmpeg
+RUN apk add nginx
+# RUN apt-get install -y openrc --no-cache
+RUN apk add python3
+RUN apk add py-pip
+#RUN apk add libpcre3 libpcre3-dev
+# install GPAC
+RUN apk add gpac
+
+RUN mkdir -p /usr/share/nginx/html/dash
+COPY nginx.conf /etc/nginx/nginx.conf
+#RUN rc-service nginx status
+COPY client.html /usr/share/nginx/html/dash/client.html
+RUN pip3 install mpegdash ffmpeg-python isodate urllib3 datetime Flask Flask-Cors mysql.connector.python uwsgi
+
+ADD . /
+
+# RUN apt-get install -y subversion && svn co https://svn.code.sf.net/p/gpac/code/trunk/gpac gpac && cd gpac && chmod +x configure && ./configure && make && make install && cp bin/gcc/libgpac.so /usr/lib
+RUN MP4Box -version
+
+EXPOSE 80
+EXPOSE 5000
+
+RUN chmod +x ./start.sh
+CMD ["./start.sh"]
